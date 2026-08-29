@@ -56,17 +56,29 @@ export async function runTickTickIntent(
     return ''
   }
 
-  let projectName = extractAfter(['سميه', 'اسمه', 'باسم', 'بأسم'])
-  if (!projectName && wantsCreateProject) projectName = extractAfter(['مشروع'])
-
-  let taskTitle = extractAfter(['بعنوان', 'عنوان', 'اسمها', 'سميها'])
-  if (!taskTitle && wantsCreateTask) {
-    taskTitle = content
-      .replace(/.*?(انشئ|أنشئ|اعمل|أعمل|اضف|أضف|create|add)\s*/i, '')
-      .replace(/مهمة\s*(جديدة|جديد)?/i, '')
-      .replace(/في مشروع\s*["']?[^"'\n،,]+?["']?/i, '')
-      .replace(/وسميها\s*[^"'\n،,]+/i, '')
+  // Clean an extracted entity name: drop leading connectors like "ال اسمه/باسم"
+  // and trailing qualifiers like "تماما/نهائيا/بالكامل" so matching is robust.
+  const cleanEntityName = (s: string): string =>
+    s
+      .replace(/^(ال\s*|الذي\s*|التي\s*)?(اسمه|باسم|سميه|اسمها|الاسم)\s*/i, '')
+      .replace(
+        /\s*(تماما|تماماً|بالكامل|نهائيا|نهائياً|نهائي|كليا|كلياً|بشكل نهائي|كاملا|كامل|النهائي)\s*$/i,
+        ''
+      )
       .trim()
+
+  let projectName = cleanEntityName(extractAfter(['سميه', 'اسمه', 'باسم', 'بأسم']))
+  if (!projectName && wantsCreateProject) projectName = cleanEntityName(extractAfter(['مشروع']))
+
+  let taskTitle = cleanEntityName(extractAfter(['بعنوان', 'عنوان', 'اسمها', 'سميها']))
+  if (!taskTitle && wantsCreateTask) {
+    taskTitle = cleanEntityName(
+      content
+        .replace(/.*?(انشئ|أنشئ|اعمل|أعمل|اضف|أضف|create|add)\s*/i, '')
+        .replace(/مهمة\s*(جديدة|جديد)?/i, '')
+        .replace(/في مشروع\s*["']?[^"'\n،,]+?["']?/i, '')
+        .replace(/وسميها\s*[^"'\n،,]+/i, '')
+    )
     if (taskTitle.length < 2) taskTitle = ''
   }
 
@@ -82,10 +94,14 @@ export async function runTickTickIntent(
 
   // Deletion (real, irreversible) — handled first so it never falls back to a read.
   if (wantsDeleteProject) {
-    const q = projectName || extractAfter(['مشروع', 'قائمة', 'project', 'list'])
+    const q = cleanEntityName(projectName || extractAfter(['مشروع', 'قائمة', 'project', 'list']))
     const projects = await fetchTickTickProjects(_token)
     const matches = q
-      ? projects.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()))
+      ? projects.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q.toLowerCase()) ||
+            q.toLowerCase().includes(p.name.toLowerCase())
+        )
       : /(كل|جميع|all)/i.test(content)
         ? projects
         : []
@@ -106,7 +122,7 @@ export async function runTickTickIntent(
   }
 
   if (wantsDeleteTask) {
-    const q = taskTitle || extractAfter(['مهمة', 'task'])
+    const q = cleanEntityName(taskTitle || extractAfter(['مهمة', 'task']))
     if (!q) return 'لم تحدد عنوان المهمة المراد حذفها. اكتب مثلاً: "احذف مهمة مراجعة التقرير".'
     const data = await fetchTasksByProjectName(targetProject, _token)
     const tasks = (data.tasks || []).filter((t: any) => t.title && t.title.toLowerCase().includes(q.toLowerCase()))
