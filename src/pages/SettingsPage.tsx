@@ -38,7 +38,6 @@ import {
   isSupabaseConnected,
   listSupabaseTables,
 } from '../lib/supabaseConnector'
-import { DEFAULT_MEMORY_TEXT } from '../lib/memory'
 
 const GEMINI_MODELS = [
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', desc: 'Recommended, ultra-fast & responsive' },
@@ -231,9 +230,9 @@ export const SettingsPage: React.FC = () => {
   }
 
   const handleResetMemory = () => {
-    if (window.confirm('Are you sure you want to reset permanent memory to the default template?')) {
-      setEditedMemory(DEFAULT_MEMORY_TEXT)
-      saveMemory(DEFAULT_MEMORY_TEXT)
+    if (window.confirm('هل أنت متأكد من رغبتك في إفراغ الذاكرة الدائمة بالكامل؟')) {
+      setEditedMemory('')
+      saveMemory('')
     }
   }
 
@@ -1168,9 +1167,9 @@ export const SettingsPage: React.FC = () => {
                   type="button"
                   onClick={handleResetMemory}
                   className="px-3 py-1.5 rounded-xl border border-red-900/40 hover:bg-red-950/30 text-xs font-medium text-red-400 transition-colors cursor-pointer"
-                  title="استعادة القالب الافتراضي"
+                  title="إفراغ الذاكرة الدائمة"
                 >
-                  استعادة الافتراضي
+                  إفراغ الذاكرة
                 </button>
 
                 <button

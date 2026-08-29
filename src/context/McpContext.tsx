@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { discoverMcpToolsFromUrl } from '../lib/mcpClient'
-import { getTickTickToken } from '../lib/ticktick'
-import { getSupabaseConnection, isSupabaseConnected, clearSupabaseConnection } from '../lib/supabaseConnector'
+import { clearTickTickToken } from '../lib/ticktick'
+import { clearSupabaseConnection } from '../lib/supabaseConnector'
 
 export interface McpToolDefinition {
   name: string
@@ -193,7 +193,7 @@ const INITIAL_SERVERS: McpServer[] = [
 
 // TickTick is surfaced as a connected MCP server (using its token API) so agents
 // can discover AND call its tools. It is only injected when a token is present.
-const TICKTICK_SERVER: McpServer = {
+export const TICKTICK_SERVER: McpServer = {
   id: 'mcp_ticktick',
   name: 'TickTick MCP',
   url: '',
@@ -238,76 +238,25 @@ export const McpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem(STORAGE_MCP_KEY)
     let currentServers: McpServer[] = []
 
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed: any[] = JSON.parse(saved)
-        const normalized: McpServer[] = parsed.map((s) => ({
+        currentServers = parsed.map((s) => ({
           ...s,
           isEnabled: s.isEnabled !== undefined ? s.isEnabled : true,
           tools: normalizeTools(s.tools || []),
         }))
-
-        // Ensure 800 Academy exists and has local dev server URL
-        const target800 = normalized.find((s) => s.name.includes('800') || s.service.includes('800'))
-        if (target800) {
-          target800.url = 'http://localhost:3000/mcp'
-          if (!target800.tools.some((t) => t.name === 'update_package')) {
-            target800.tools = DEFAULT_TOOLS_BY_SERVICE['800 Academy']
-          }
-        } else {
-          normalized.push(INITIAL_SERVERS[0])
-        }
-
-        // Ensure TickTick server has full 47 tools
-        const targetTickTick = normalized.find((s) => s.service === 'ticktick' || s.name.toLowerCase().includes('tick'))
-        if (targetTickTick) {
-          if (targetTickTick.tools.length < 30) {
-            targetTickTick.tools = TICKTICK_MCP_TOOLS
-          }
-        }
-
-        // Ensure Supabase server has the full tool set and current project URL
-        const targetSupabase = normalized.find((s) => s.service === 'supabase' || s.name.toLowerCase().includes('supabase'))
-        if (targetSupabase) {
-          const conn = getSupabaseConnection()
-          targetSupabase.url = conn?.projectUrl || targetSupabase.url
-          if (targetSupabase.tools.length < SUPABASE_MCP_TOOLS.length) {
-            targetSupabase.tools = SUPABASE_MCP_TOOLS
-          }
-        }
-
-        currentServers = normalized
       } catch (e) {
         console.error('Error parsing stored MCP servers:', e)
-        currentServers = INITIAL_SERVERS
+        currentServers = []
       }
     } else {
+      // First-time visit only: initialize with default servers and persist
       currentServers = INITIAL_SERVERS
-    }
-
-    // Ensure TickTick MCP server is visible to agents whenever a token exists.
-    if (
-      getTickTickToken() &&
-      !currentServers.some((s) => s.service === 'ticktick' || s.name.toLowerCase().includes('tick'))
-    ) {
-      currentServers = [TICKTICK_SERVER, ...currentServers]
-    }
-
-    // Ensure the user's connected Supabase project is visible to agents.
-    if (
-      isSupabaseConnected() &&
-      !currentServers.some((s) => s.service === 'supabase' || s.name.toLowerCase().includes('supabase'))
-    ) {
-      const conn = getSupabaseConnection()
-      const supabaseServer: McpServer = {
-        ...SUPABASE_SERVER,
-        url: conn?.projectUrl || '',
-      }
-      currentServers = [supabaseServer, ...currentServers]
+      localStorage.setItem(STORAGE_MCP_KEY, JSON.stringify(currentServers))
     }
 
     setServers(currentServers)
-    localStorage.setItem(STORAGE_MCP_KEY, JSON.stringify(currentServers))
 
     // Background auto-discovery for servers with active URLs
     const autoDiscover = async () => {
@@ -452,9 +401,18 @@ export const McpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }
 
   const disconnectServer = async (id: string) => {
-    if (id === 'mcp_supabase') {
+    const target = servers.find((s) => s.id === id)
+
+    // If removing TickTick server, also clear token so it does not resurrect
+    if (id === 'mcp_ticktick' || target?.service === 'ticktick' || target?.name.toLowerCase().includes('tick')) {
+      clearTickTickToken()
+    }
+
+    // If removing Supabase server, also clear credentials
+    if (id === 'mcp_supabase' || target?.service === 'supabase' || target?.name.toLowerCase().includes('supabase')) {
       clearSupabaseConnection()
     }
+
     const updated = servers.filter((s) => s.id !== id)
     saveServers(updated)
 
