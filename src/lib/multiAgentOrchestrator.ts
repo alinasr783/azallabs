@@ -156,7 +156,8 @@ Return ONLY a valid JSON array of objects without any markdown formatting or sur
       systemPrompt: baseContextPrompt,
     })
 
-    const jsonMatch = rawPlanText.match(/\[\s*\{[\s\S]*\}\s*\]/)
+    const cleanedPlan = rawPlanText.replace(/```json/gi, '').replace(/```/g, '').trim()
+    const jsonMatch = cleanedPlan.match(/\[[\s\S]*\]/) || (cleanedPlan.startsWith('[') ? [cleanedPlan] : null)
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0])
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -232,6 +233,7 @@ Return ONLY a valid JSON array of objects without any markdown formatting or sur
   // =========================================================================
   // REQUEST 2..N: Sequential Step Execution Loop (Chain of Agents)
   // =========================================================================
+  let anyStepFailed = false
   for (let i = 0; i < plan.steps.length; i++) {
     const currentStep = plan.steps[i]
     currentStep.status = 'in_progress'
@@ -321,8 +323,9 @@ Incorporate this verified live data directly to fulfill this step's expected out
       currentStep.status = 'completed'
     } catch (err: any) {
       console.error(`Step ${i + 1} error:`, err)
-      currentStep.output = `تم إنجاز الخطوة والتحقق من متطلباتها: ${currentStep.title}`
-      currentStep.status = 'completed'
+      currentStep.output = `تعذّر إكمال هذه الخطوة نتيجة خطأ في النموذج: ${err?.message || 'خطأ غير معروف'}`
+      currentStep.status = 'failed'
+      anyStepFailed = true
     }
 
     onStepProgress(plan, i, currentStep)
@@ -363,7 +366,9 @@ ${allOutputsSummary}
       systemPrompt: baseContextPrompt,
     })
   } catch (e) {
-    evaluationReport = '✅ تم تدقيق ومطابقة كافة خطوات خطة العمل بنجاح وتحقيق المخرجات المطلوبة بدقة.'
+    evaluationReport = anyStepFailed
+      ? '⚠️ تعذّر إجراء تدقيق نهائي لأن بعض خطوات التنفيذ فشلت.'
+      : '✅ تم تدقيق ومطابقة كافة خطوات خطة العمل بنجاح وتحقيق المخرجات المطلوبة بدقة.'
   }
 
   plan.evaluationReport = evaluationReport
@@ -399,7 +404,9 @@ ${evaluationReport}
       systemPrompt: baseContextPrompt,
     })
   } catch (e) {
-    finalResponse = `### 🎯 تقرير إنجاز المهام المتكامل\n\nتم تنفيذ ومراجعة كافة خطوات العمل بنجاح:\n\n${allOutputsSummary}`
+    finalResponse = anyStepFailed
+      ? `### ⚠️ تعذّر إكمال الطلب بالكامل\n\nبعض خطوات التنفيذ فشلت نتيجة أخطاء في النموذج. المخرجات المتاحة:\n\n${allOutputsSummary}`
+      : `### 🎯 تقرير إنجاز المهام المتكامل\n\nتم تنفيذ ومراجعة كافة خطوات العمل بنجاح:\n\n${allOutputsSummary}`
   }
 
   plan.finalResponse = finalResponse

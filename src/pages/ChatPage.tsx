@@ -386,7 +386,7 @@ export const ChatPage: React.FC = () => {
       return
     }
 
-    if (isComplexTask(content)) {
+    if (isComplexTask(content) && !isTickTickIntent) {
       try {
         let realTasksText = ''
         if (tickTickToken) {
