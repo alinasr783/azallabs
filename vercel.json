@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/ticktick/(.*)",
+      "destination": "/api/ticktick"
+    },
+    {
+      "source": "/api/ticktick",
+      "destination": "/api/ticktick"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
