@@ -2,10 +2,12 @@ export const TICKTICK_CLIENT_ID = import.meta.env.VITE_TICKTICK_CLIENT_ID || ''
 
 export const TICKTICK_CLIENT_SECRET = import.meta.env.VITE_TICKTICK_CLIENT_SECRET || ''
 export const getRedirectUri = () => {
-  if (typeof window !== 'undefined') {
-    return `${window.location.origin}/auth/ticktick/callback`
-  }
-  return 'http://localhost:5174/auth/ticktick/callback'
+  // Allow forcing the canonical production URL via VITE_APP_URL (useful behind
+  // proxies / when window.location.origin is not the public domain).
+  const base =
+    import.meta.env.VITE_APP_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5174')
+  return `${base}/auth/ticktick/callback`
 }
 
 export const TICKTICK_TOKEN_KEY = 'azal_ticktick_access_token'

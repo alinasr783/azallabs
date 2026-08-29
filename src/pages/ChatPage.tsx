@@ -1507,31 +1507,29 @@ ${universalMcpContext}
 
       {/* ═══ Main Workspace ═══ */}
       <main className="flex-1 flex flex-col h-full min-w-0">
-        {/* ─── Header Bar ─── */}
-        <header className="h-11 px-4 border-b border-[#2c2e3a] bg-[#14151a] flex items-center justify-between select-none shrink-0">
-          <div className="flex items-center gap-3">
-            {!sidebarOpen && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-1 text-[#6b6e79] hover:text-[#f3f3ee] transition-colors cursor-pointer"
-                title="القائمة"
-              >
-                <PanelRight className="w-4 h-4" />
-              </button>
-            )}
-            <span className="text-sm font-bold text-[#f3f3ee]">Azal Labs</span>
+        {/* ─── Header Bar (fixed, larger on mobile) ─── */}
+        <header className="h-14 px-4 pt-[env(safe-area-inset-top)] border-b border-[#2c2e3a] bg-[#14151a] flex items-center justify-between select-none shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="md:hidden p-2 -mr-1.5 text-[#9da0a8] hover:text-[#f3f3ee] transition-colors cursor-pointer"
+              title="القائمة"
+            >
+              <PanelRight className="w-5 h-5" />
+            </button>
+            <span className="text-base font-bold text-[#f3f3ee] truncate">Azal Labs</span>
             {currentTask && (
-              <span className="text-[11px] text-[#6b6e79] hidden sm:inline">
+              <span className="text-[11px] text-[#6b6e79] hidden sm:inline truncate">
                 — {currentTask.title}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {/* Model Badge */}
             <Link
               to="/settings?tab=llm"
-              className="text-[11px] text-[#6b6e79] hover:text-[#9da0a8] transition-colors"
+              className="px-2 py-1 text-[11px] text-[#6b6e79] hover:text-[#9da0a8] transition-colors"
             >
               {llmConfig.activeProvider}
             </Link>
@@ -1540,26 +1538,26 @@ ${universalMcpContext}
             {messages.length > 0 && (
               <button
                 onClick={handleClearCurrentTask}
-                className="p-1 text-[#6b6e79] hover:text-red-400 transition-colors cursor-pointer"
+                className="p-2 text-[#6b6e79] hover:text-red-400 transition-colors cursor-pointer"
                 title="مسح"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-4 h-4" />
               </button>
             )}
 
             {/* Settings */}
             <Link
               to="/settings"
-              className="p-1 text-[#6b6e79] hover:text-[#9da0a8] transition-colors"
+              className="p-2 text-[#6b6e79] hover:text-[#9da0a8] transition-colors"
               title="الإعدادات"
             >
-              <Settings className="w-3.5 h-3.5" />
+              <Settings className="w-4 h-4" />
             </Link>
           </div>
         </header>
 
-        {/* ─── Message Stream ─── */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+        {/* ─── Message Stream (no scroll when empty) ─── */}
+        <div className={`flex-1 flex flex-col ${messages.length === 0 ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'}`}>
           {messages.length === 0 ? (
             <EmptyState onSelectPrompt={handleSendMessage} />
           ) : (
@@ -1573,8 +1571,8 @@ ${universalMcpContext}
           )}
         </div>
 
-        {/* ─── Input ─── */}
-        <div className="pt-1">
+        {/* ─── Input (fixed bottom bar) ─── */}
+        <div className="shrink-0 border-t border-[#2c2e3a] bg-[#0d0e11]">
           <ChatInput
             onSendMessage={handleSendMessage}
             isLoading={isLoading}
@@ -1582,8 +1580,8 @@ ${universalMcpContext}
           />
         </div>
 
-        {/* ─── Status Bar ─── */}
-        <div className="h-6 px-4 border-t border-[#2c2e3a] bg-[#0d0e11] flex items-center gap-4 text-[10px] text-[#4a4d58] select-none shrink-0">
+        {/* ─── Status Bar (desktop only) ─── */}
+        <div className="hidden sm:flex h-6 px-4 border-t border-[#2c2e3a] bg-[#0d0e11] items-center gap-4 text-[10px] text-[#4a4d58] select-none shrink-0">
           <span>{llmConfig[llmConfig.activeProvider]?.model || llmConfig.activeProvider}</span>
           {isLoading && (
             <span className="text-[#cc785c] animate-gentle-pulse">● جاري المعالجة</span>
@@ -1591,7 +1589,7 @@ ${universalMcpContext}
           {totalTodoCount > 0 && (
             <span>المهام: {completedCount}/{totalTodoCount}</span>
           )}
-          <span className="mr-auto">{messages.length > 0 ? `${messages.length} رسالة` : 'جاهز'}</span>
+          <span className="mr-auto">{messages.length > 0 ? `${messages.length} رسلة` : 'جاهز'}</span>
         </div>
       </main>
     </div>
