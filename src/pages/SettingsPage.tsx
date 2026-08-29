@@ -10,7 +10,6 @@ import {
   ChevronUp,
   Loader2,
   Check,
-  Sparkles,
   Link2,
   Cpu,
   Brain,
@@ -441,14 +440,9 @@ export const SettingsPage: React.FC = () => {
             <ArrowRight className="w-5 h-5" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-[#cc785c]/15 text-[#cc785c] flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5" />
-              </div>
-              <h1 className="text-sm font-semibold text-[#f3f3ee]">
-                الإعدادات والتكوين
-              </h1>
-            </div>
+            <h1 className="text-sm font-bold text-[#f3f3ee]">
+              Azal Labs — الإعدادات والتكوين
+            </h1>
             <p className="text-[11px] text-[#9da0a8]">
               إدارة نماذج (LLM)، والتعليمات التوجيهية، والذاكرة الدائمة، وخوادم الربط (MCP)
             </p>
@@ -930,18 +924,13 @@ export const SettingsPage: React.FC = () => {
           <section className="space-y-6">
             {/* Header & Actions */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-[#cc785c]/10 border border-[#cc785c]/30 text-[#cc785c] flex items-center justify-center text-sm shadow-xs">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-[#f3f3ee] flex items-center gap-2">
-                      <span>التعليمات التوجيهية للنظام</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-[#cc785c]/20 text-[#cc785c] border border-[#cc785c]/30">
-                        وضع متقدم
-                      </span>
-                    </h2>
+                <div>
+                  <h2 className="text-base font-semibold text-[#f3f3ee] flex items-center gap-2">
+                    <span>التعليمات التوجيهية للنظام</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-[#14151a] text-[#cc785c] border border-[#2c2e3a]">
+                      وضع متقدم
+                    </span>
+                  </h2>
                     <p className="text-xs text-[#9da0a8] mt-0.5">
                       تحديد القواعد السلوكية، وإرشادات الدقة ومكافحة الهلوسة، وتعليمات استدعاء الأدوات البرمجية.
                     </p>
@@ -998,9 +987,8 @@ export const SettingsPage: React.FC = () => {
             {/* Presets Quick Selector */}
             <div className="p-4 rounded-2xl border border-[#262833] bg-[#14151a] space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[#9da0a8] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#cc785c]" />
-                  <span>قوالب سلوك الوكيل الجاهزة</span>
+                <span className="text-xs font-medium text-[#9da0a8]">
+                  قوالب سلوك الوكيل الجاهزة
                 </span>
                 <span className="text-[11px] text-[#6b6e79]">انقر لاختيار قالب جاهز</span>
               </div>
@@ -1524,10 +1512,8 @@ export const SettingsPage: React.FC = () => {
                               className="px-3 py-1.5 rounded-full border border-[#cc785c]/40 hover:bg-[#cc785c]/10 text-xs font-medium text-[#cc785c] transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                               title="اكتشاف الأدوات تلقائياً"
                             >
-                              {discoveringServerId === server.id ? (
+                              {discoveringServerId === server.id && (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Sparkles className="w-3.5 h-3.5" />
                               )}
                               <span>اكتشاف تلقائي</span>
                             </button>
@@ -1546,7 +1532,7 @@ export const SettingsPage: React.FC = () => {
 
                       {discoverySuccessMsg?.id === server.id && (
                         <div className="mt-3 p-2.5 rounded-xl bg-purple-950/40 border border-purple-800 text-xs text-purple-300 flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                          <Check className="w-4 h-4 text-purple-400 shrink-0" />
                           <span>{discoverySuccessMsg.msg}</span>
                         </div>
                       )}

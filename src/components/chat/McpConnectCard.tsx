@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { CheckCircle2, Link2, ExternalLink, Loader2, Unlink, ShieldCheck, Plus, Check } from 'lucide-react'
 import { useMcp } from '../../context/McpContext'
 import { getTickTickAuthUrl, createTickTickTask, clearTickTickToken, getTickTickToken, setTickTickToken } from '../../lib/ticktick'
 
@@ -55,10 +54,10 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
         title: `Azal Labs Test Task (${now})`,
         content: 'This task was created automatically via Azal Labs integration with your TickTick account.',
       })
-      setTaskCreatedMsg(`Task created successfully in your TickTick app! (Title: ${res.title})`)
+      setTaskCreatedMsg(`تم إنشاء المهمة بنجاح: "${res.title}"`)
       setTimeout(() => setTaskCreatedMsg(null), 5000)
     } catch (err: any) {
-      setTaskCreatedMsg(`Error: ${err.message}`)
+      setTaskCreatedMsg(`خطأ: ${err.message}`)
     } finally {
       setIsCreatingTask(false)
     }
@@ -77,136 +76,117 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
 
   return (
     <>
-      <div className="my-3 p-4 rounded-2xl border border-[#262833] bg-[#14151a] shadow-xs text-right max-w-xl" dir="rtl">
-        <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="my-2.5 p-3.5 rounded-lg border border-[#2c2e3a] bg-[#14151a] text-right max-w-xl">
+        <div className="flex items-start justify-between gap-2 mb-2">
           <div>
             <div className="flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-[#cc785c]" />
-              <h3 className="text-sm font-semibold text-[#f3f3ee]">
+              <span className="text-[#cc785c] text-xs">●</span>
+              <h3 className="text-xs font-semibold text-[#f3f3ee]">
                 {displayName}
               </h3>
             </div>
-            <span className="text-xs text-[#9da0a8] mt-0.5 block">
+            <span className="text-[11px] text-[#6b6e79] mt-0.5 block font-mono">
               {url}
             </span>
           </div>
 
           <span
-            className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 ${
+            className={`px-2 py-0.5 rounded text-[11px] font-medium ${
               isConnected
-                ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
-                : 'bg-[#1e1f28] text-[#9da0a8] border border-[#2c2e3a]'
+                ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/60'
+                : 'bg-[#0d0e11] text-[#6b6e79] border border-[#2c2e3a]'
             }`}
           >
-            {isConnected ? (
-              <>
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                متصل بنجاح
-              </>
-            ) : (
-              'جاهز للربط'
-            )}
+            {isConnected ? '✔ متصل' : '○ جاهز للربط'}
           </span>
         </div>
 
         {/* Description */}
-        <p className="text-xs text-[#9da0a8] mb-3 leading-relaxed">
+        <p className="text-xs text-[#9da0a8] mb-2.5 leading-relaxed">
           {isConnected
-            ? `تم ربط حسابك بنجاح عبر بروتوكول الربط (MCP). يستطيع الوكيل الآن تصفح وإنشاء وإدارة مهامك الفعلية.`
-            : `يتيح خادم الربط (MCP) للمساعد الاتصال بحسابك في (TickTick) لإدارة وتنظيم المهام ومزامنتها مباشرة مع تطبيقك.`}
+            ? `تم ربط حسابك بنجاح عبر بروتوكول الربط (MCP). يستطيع الوكيل الآن إدارة ومزامنة مهامك الفعلية.`
+            : `يتيح خادم الربط (MCP) للمساعد الاتصال بحسابك لإدارة وتنظيم المهام مباشرة.`}
         </p>
 
         {/* Live Test Task Box if connected */}
         {isConnected && isTickTick && (
-          <div className="mb-3 p-3 rounded-xl bg-[#0f1014] border border-[#262833] space-y-2">
+          <div className="mb-2.5 p-2.5 rounded bg-[#0d0e11] border border-[#2c2e3a] space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-[#f3f3ee]">
-                اختبار الاتصال المباشر:
+              <span className="text-[11px] text-[#9da0a8]">
+                اختبار الاتصال:
               </span>
               <button
                 type="button"
                 onClick={handleCreateTestTask}
                 disabled={isCreatingTask}
-                className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                className="px-2.5 py-1 rounded bg-[#cc785c] hover:bg-[#be684e] text-white text-[11px] font-medium transition-colors disabled:opacity-50 cursor-pointer"
               >
-                {isCreatingTask ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Plus className="w-3 h-3" />
-                )}
-                <span>إنشاء مهمة اختبارية في (TickTick)</span>
+                {isCreatingTask ? 'جاري الإنشاء...' : '+ مهمة اختبارية'}
               </button>
             </div>
 
             {taskCreatedMsg && (
-              <div className="text-[11px] p-2 rounded-lg bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 flex items-center gap-1.5 font-mono">
-                <Check className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" />
-                <span>{taskCreatedMsg}</span>
+              <div className="text-[11px] p-1.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50">
+                ✔ {taskCreatedMsg}
               </div>
             )}
           </div>
         )}
 
         {/* Action Button */}
-        <div className="pt-2 border-t border-[#22242c] flex flex-col items-stretch gap-2">
+        <div className="pt-2 border-t border-[#2c2e3a] flex items-center justify-between">
           {isConnected ? (
-            <div className="flex items-center justify-between">
+            <>
               <button
                 type="button"
                 onClick={handleDisconnect}
-                className="text-xs text-red-400 hover:bg-red-950/30 px-3 py-1.5 rounded-xl border border-red-900/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="text-[11px] text-red-400 hover:text-red-300 transition-colors cursor-pointer"
               >
-                <Unlink className="w-3.5 h-3.5" />
-                <span>قطع الاتصال</span>
+                قطع الاتصال
               </button>
-              <span className="text-[10px] text-emerald-400 font-medium">
-                نشط ومتزامن مع (TickTick)
+              <span className="text-[10px] text-[#6b6e79]">
+                متزامن
               </span>
-            </div>
+            </>
           ) : (
-            <div className="w-full space-y-2.5">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="w-full space-y-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleStartOAuth}
-                  className="px-4 py-2 rounded-xl bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                  className="px-3 py-1.5 rounded bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-colors cursor-pointer"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>الاتصال عبر التوثيق السريع (OAuth)</span>
+                  الاتصال عبر التوثيق السريع (OAuth)
                 </button>
 
                 {isTickTick && (
                   <button
                     type="button"
                     onClick={() => setShowManualInput(!showManualInput)}
-                    className="px-3 py-2 rounded-xl border border-[#2c2e3a] text-xs text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#1a1b22] transition-colors cursor-pointer"
+                    className="px-2.5 py-1.5 rounded border border-[#2c2e3a] text-[11px] text-[#6b6e79] hover:text-[#f3f3ee] transition-colors cursor-pointer"
                   >
-                    {showManualInput ? 'إخفاء حقل المفتاح' : 'أو إدخال المفتاح (Token) يدوياً'}
+                    {showManualInput ? 'إخفاء' : 'إدخال (Token) يدوياً'}
                   </button>
                 )}
               </div>
 
               {showManualInput && isTickTick && (
-                <div className="p-3 rounded-xl bg-[#0f1014] border border-[#262833] space-y-2">
-                  <div className="text-[11px] text-[#9da0a8]">
-                    يمكنك نسخ مفتاح (API Token) الخاص بك من إعدادات الويب في (TickTick):
-                  </div>
-                  <div className="flex items-center gap-2">
+                <div className="p-2 rounded bg-[#0d0e11] border border-[#2c2e3a] space-y-1.5">
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="password"
                       value={manualToken}
                       onChange={(e) => setManualToken(e.target.value)}
                       placeholder="الصق المفتاح (Token) هنا..."
-                      className="flex-1 px-3 py-1.5 rounded-xl border border-[#2c2e3a] bg-[#14151a] text-xs text-[#f3f3ee] outline-hidden focus:border-[#cc785c]"
+                      className="flex-1 px-2.5 py-1 rounded border border-[#2c2e3a] bg-[#14151a] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={handleSaveManualToken}
                       disabled={!manualToken.trim()}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                      className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs transition-colors disabled:opacity-50 cursor-pointer"
                     >
-                      {tokenSaved ? <Check className="w-3.5 h-3.5" /> : null}
-                      <span>{tokenSaved ? 'تم الحفظ!' : 'حفظ والاتصال'}</span>
+                      {tokenSaved ? 'تم الحفظ!' : 'حفظ'}
                     </button>
                   </div>
                 </div>
@@ -216,31 +196,23 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
         </div>
       </div>
 
-      {/* Generic Modal for other non-TickTick servers */}
+      {/* Generic Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
-          <div className="w-full max-w-md bg-[#16171d] border border-[#262833] rounded-3xl p-6 shadow-xl text-right">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 rounded-full bg-[#cc785c]/10 flex items-center justify-center text-[#cc785c]">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-medium text-[#f3f3ee]">
-                  ربط خادم (MCP)
-                </h3>
-                <p className="text-xs text-[#9da0a8]">
-                  {url}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#262833]">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-[#14151a] border border-[#2c2e3a] rounded-lg p-4 text-right">
+            <h3 className="text-sm font-semibold text-[#f3f3ee] mb-1">
+              ربط خادم (MCP)
+            </h3>
+            <p className="text-xs text-[#6b6e79] mb-3 font-mono">
+              {url}
+            </p>
+            <div className="flex justify-end pt-2 border-t border-[#2c2e3a]">
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-[#2c2e3a] text-xs font-medium text-[#9da0a8] hover:bg-[#1a1b22] hover:text-[#f3f3ee] transition-colors cursor-pointer"
+                className="px-3 py-1 text-xs text-[#6b6e79] hover:text-[#f3f3ee] cursor-pointer"
               >
-                إلغاء
+                إغلاق
               </button>
             </div>
           </div>
