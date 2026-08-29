@@ -95,31 +95,78 @@ export async function fetchGitHubRepos(tokenOverride?: string, sort: string = 'u
   const token = tokenOverride || getGitHubToken()
   if (!token) throw new Error('GitHub Access Token is required.')
 
-  let res = await fetch(`https://api.github.com/user/repos?sort=${sort}&per_page=${perPage}&affiliation=owner,collaborator`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  })
+  let allRepos: any[] = []
 
-  if (!res.ok) {
-    // Fallback without affiliation parameter
-    res = await fetch(`https://api.github.com/user/repos?sort=${sort}&per_page=${perPage}`, {
+  // 1. Try authenticated /user/repos with affiliation
+  try {
+    const res = await fetch(`https://api.github.com/user/repos?sort=${sort}&per_page=${perPage}&affiliation=owner,collaborator`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
       },
     })
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        allRepos = data
+      }
+    }
+  } catch (e) {
+    console.warn('Error fetching /user/repos with affiliation:', e)
   }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message || `Failed to fetch GitHub repositories (${res.status})`)
+  // 2. If empty or failed, try without affiliation
+  if (!allRepos.length) {
+    try {
+      const res = await fetch(`https://api.github.com/user/repos?sort=${sort}&per_page=${perPage}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data) && data.length > 0) {
+          allRepos = data
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching /user/repos:', e)
+    }
   }
 
-  return await res.json()
+  // 3. Fallback: Fetch user profile to get login username, then fetch public repos /users/{username}/repos
+  try {
+    const userRes = await testGitHubConnection(token)
+    const username = userRes.user?.login
+    if (username) {
+      const pubRes = await fetch(`https://api.github.com/users/${username}/repos?sort=${sort}&per_page=${perPage}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      })
+      if (pubRes.ok) {
+        const pubData = await pubRes.json()
+        if (Array.isArray(pubData) && pubData.length > 0) {
+          const existingIds = new Set(allRepos.map((r: any) => r.id))
+          for (const r of pubData) {
+            if (!existingIds.has(r.id)) {
+              allRepos.push(r)
+              existingIds.add(r.id)
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error fetching /users/{username}/repos:', e)
+  }
+
+  return allRepos
 }
 
 /**

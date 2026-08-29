@@ -180,15 +180,81 @@ export async function runGitHubIntent(
   }
 
   // 3. Execute tool
-  let execResult = await exec(tool, params)
+  let execResult: any = null
 
-  // Direct resilient fallback if search_repositories returned empty or failed
+  const isAskingForOwnRepos =
+    (lower.includes('مستودع') || lower.includes('مستودعات') || lower.includes('repo') || lower.includes('repos') || lower.includes('مشاريعي') || lower.includes('مشاريع')) &&
+    !lower.includes('commit') &&
+    !lower.includes('كوميت') &&
+    !lower.includes('فرع') &&
+    !lower.includes('فروع') &&
+    !lower.includes('branch') &&
+    !lower.includes('issue') &&
+    !lower.includes('مشكلة') &&
+    !lower.includes('مشاكل') &&
+    !lower.includes('pr') &&
+    !lower.includes('pull') &&
+    !lower.includes('شجرة') &&
+    !lower.includes('tree')
+
+  if (isAskingForOwnRepos || tool === 'search_repositories' || tool === 'list_repositories') {
+    try {
+      const repos = await fetchGitHubRepos(token, 'updated', 100)
+      const target = (params.repo || params.query || '').toLowerCase().trim()
+      if (target) {
+        const filtered = repos.filter((r: any) =>
+          r.name?.toLowerCase().includes(target) ||
+          (r.description && r.description.toLowerCase().includes(target))
+        )
+        execResult = {
+          success: true,
+          result: filtered,
+          serverName: 'GitHub MCP',
+          toolName: 'search_repositories',
+        }
+      } else {
+        execResult = {
+          success: true,
+          result: repos,
+          serverName: 'GitHub MCP',
+          toolName: 'list_repositories',
+        }
+      }
+    } catch (e: any) {
+      execResult = await exec(tool, params)
+    }
+  } else if (tool === 'list_commits') {
+    try {
+      const resolved = await resolveGitHubContext(token, params.repo || content)
+      const owner = params.owner || resolved.owner
+      const repo = params.repo || resolved.repo
+      if (owner && repo) {
+        params.owner = owner
+        params.repo = repo
+        const commits = await fetchGitHubRepoCommits(owner, repo, token, 20, params.sha)
+        execResult = {
+          success: true,
+          result: { owner, repo, commits },
+          serverName: 'GitHub MCP',
+          toolName: 'list_commits',
+        }
+      } else {
+        execResult = await exec(tool, params)
+      }
+    } catch (e: any) {
+      execResult = await exec(tool, params)
+    }
+  } else {
+    execResult = await exec(tool, params)
+  }
+
+  // Direct resilient fallback if tool failed or returned empty
   const isReposListEmpty =
     (Array.isArray(execResult?.result) && execResult.result.length === 0) ||
     (Array.isArray(execResult?.result?.items) && execResult.result.items.length === 0) ||
     !execResult?.result
 
-  if ((tool === 'search_repositories' || tool === 'list_repositories') && (!execResult.success || isReposListEmpty)) {
+  if ((tool === 'search_repositories' || tool === 'list_repositories') && (!execResult?.success || isReposListEmpty)) {
     try {
       const directRepos = await fetchGitHubRepos(token, 'updated', 100)
       if (Array.isArray(directRepos) && directRepos.length > 0) {
@@ -218,27 +284,8 @@ export async function runGitHubIntent(
     }
   }
 
-  // Direct resilient fallback for commits if primary tool returned empty or failed
-  if (tool === 'list_commits' && (!execResult.success || (Array.isArray(execResult?.result?.commits) && execResult.result.commits.length === 0))) {
-    if (params.owner && params.repo) {
-      try {
-        const directCommits = await fetchGitHubRepoCommits(params.owner, params.repo, token, 20, params.sha)
-        if (Array.isArray(directCommits) && directCommits.length > 0) {
-          execResult = {
-            success: true,
-            result: { owner: params.owner, repo: params.repo, commits: directCommits },
-            serverName: 'GitHub MCP',
-            toolName: 'list_commits',
-          }
-        }
-      } catch (e: any) {
-        console.warn('Direct fallback commits fetch error:', e)
-      }
-    }
-  }
-
-  if (!execResult.success) {
-    const msg = execResult.errorMessage || 'خطأ غير معروف'
+  if (!execResult?.success) {
+    const msg = execResult?.errorMessage || 'خطأ غير معروف'
     return `⚠️ تعذر تنفيذ العملية على خادم GitHub MCP: ${msg}\n\nيرجى التأكد من صلاحية رمز الوصول (Personal Access Token) في [صفحة الإعدادات](/settings?tab=mcp).`
   }
 
@@ -291,14 +338,21 @@ function formatGitHubResult(tool: string, params: Record<string, any>, result: a
       ? result.repositories
       : []
 
+    const targetQuery = params.repo || params.query
     if (!rawRepos.length) {
+      if (targetQuery) {
+        return (
+          `❌ **لم يتم العثور على مستودع باسم "${targetQuery}" في حسابك على GitHub.**\n\n` +
+          `يرجى التأكد من كتابة الاسم بدقة، أو اطلب: «اعرضلي قائمة مستودعاتي» للاطلاع على كافة المستودعات المسجلة لديك.`
+        )
+      }
       return (
         '✅ **تم الاتصال بنجاح بخادم GitHub MCP.**\n\n' +
         'لا توجد مستودعات مطابقة حالياً في حساب GitHub الخاص بك.'
       )
     }
 
-    const rows = rawRepos.slice(0, 25).map((r: any) => {
+    const rows = rawRepos.slice(0, 30).map((r: any) => {
       const name = r.name || 'بدون اسم'
       const fullName = r.full_name || name
       const url = r.html_url || `https://github.com/${fullName}`
@@ -310,9 +364,13 @@ function formatGitHubResult(tool: string, params: Record<string, any>, result: a
       return `| [**${name}**](${url}) | \`${fullName}\` | ${lang} | ${isPrivate} | ⭐ ${stars} | ${updated} |`
     })
 
+    const headerTitle = targetQuery
+      ? `### 🐙 نتائج البحث عن مستودع: **${targetQuery}** (${rawRepos.length} مستودع مطابِق)`
+      : `### 🐙 مستودعاتك في GitHub (إجمالي ${rawRepos.length} مستودع)`
+
     return (
-      `### 🐙 مستودعاتك في GitHub (إجمالي ${rawRepos.length} مستودع)\n\n` +
-      `تم استرجاع المستودعات مباشرة عبر خادم \`GitHub MCP\`:\n\n` +
+      `${headerTitle}\n\n` +
+      `تم استرجاع المستودعات مباشرة وحصرياً من حسابك عبر \`GitHub MCP\`:\n\n` +
       `| اسم المستودع | المسار الكامل | لغة البرمجة | الخصوصية | النجوم | آخر تحديث |\n` +
       `| :--- | :--- | :--- | :--- | :--- | :--- |\n` +
       rows.join('\n') +
