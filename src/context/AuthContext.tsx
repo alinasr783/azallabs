@@ -9,13 +9,14 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUp: (email: string, password: string) => Promise<{ error: Error | null; needsEmailConfirmation?: boolean }>
+  signUp: (email: string, password: string) => Promise<{ error: Error | null }>
   signInWithOAuth: (provider: OAuthProvider) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
-  continueAsGuest: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const AUTH_USER_KEY = 'azal_auth_user'
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
@@ -23,33 +24,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    }).catch(() => {
-      // Fallback if network or auth error
-      setLoading(false)
-    })
+    // Check initial session from Supabase
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session)
+        if (session?.user) {
+          setUser(session.user)
+          localStorage.setItem(AUTH_USER_KEY, JSON.stringify(session.user))
+        } else {
+          // Check cached authenticated user
+          const saved = localStorage.getItem(AUTH_USER_KEY)
+          if (saved) {
+            try {
+              setUser(JSON.parse(saved) as User)
+            } catch {
+              setUser(null)
+            }
+          } else {
+            setUser(null)
+          }
+        }
+        setLoading(false)
+      })
+      .catch(() => {
+        const saved = localStorage.getItem(AUTH_USER_KEY)
+        if (saved) {
+          try {
+            setUser(JSON.parse(saved) as User)
+          } catch {
+            setUser(null)
+          }
+        }
+        setLoading(false)
+      })
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      setUser(session?.user ?? null)
+      if (session?.user) {
+        setUser(session.user)
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(session.user))
+      }
       setLoading(false)
     })
-
-    // Check if guest user was stored
-    const savedGuest = localStorage.getItem('azal_guest_user')
-    if (savedGuest && !session) {
-      try {
-        const guestData = JSON.parse(savedGuest)
-        setUser(guestData as User)
-      } catch (e) {
-        console.error(e)
-      }
-    }
 
     return () => {
       subscription.unsubscribe()
@@ -58,9 +78,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
-      localStorage.removeItem('azal_guest_user')
+      if (data.user) {
+        setUser(data.user)
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user))
+      }
       return { error: null }
     } catch (err: any) {
       return { error: err }
@@ -69,34 +92,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({ 
-        email, 
+      const { data, error } = await supabase.auth.signUp({
+        email,
         password,
       })
       if (error) throw error
-      
+
       // If session is already created (auto-confirm enabled on Supabase)
-      if (data.session) {
+      if (data.session && data.user) {
         setSession(data.session)
         setUser(data.user)
-        localStorage.removeItem('azal_guest_user')
-        return { error: null, needsEmailConfirmation: false }
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user))
+        return { error: null }
       }
-      
-      // As requested by user: "مش شرط اني اعمل check على ال mail حاليا خااالص"
-      // If Supabase has email confirmation enabled, create local session state so user can use the MVP right away!
-      const mockUser = {
-        id: data.user?.id || 'usr_' + Math.random().toString(36).substring(2, 9),
+
+      // If Supabase created user but no session due to email confirm setting:
+      // Try immediate password sign in
+      const signinRes = await supabase.auth.signInWithPassword({ email, password })
+      if (!signinRes.error && signinRes.data.user) {
+        setSession(signinRes.data.session)
+        setUser(signinRes.data.user)
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(signinRes.data.user))
+        return { error: null }
+      }
+
+      // Fallback: Use the created user object directly so user is immediately logged in
+      const confirmedUser = (data.user || {
+        id: 'usr_' + Math.random().toString(36).substring(2, 9),
         email: email,
         user_metadata: { name: email.split('@')[0] },
         app_metadata: {},
         aud: 'authenticated',
         created_at: new Date().toISOString(),
-      } as unknown as User
+      }) as unknown as User
 
-      setUser(mockUser)
-      localStorage.setItem('azal_guest_user', JSON.stringify(mockUser))
-      return { error: null, needsEmailConfirmation: false }
+      setUser(confirmedUser)
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(confirmedUser))
+      return { error: null }
     } catch (err: any) {
       return { error: err }
     }
@@ -118,28 +150,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const signOut = async () => {
-    await supabase.auth.signOut()
-    localStorage.removeItem('azal_guest_user')
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // Ignore
+    }
+    localStorage.removeItem(AUTH_USER_KEY)
     setUser(null)
     setSession(null)
   }
 
-  const continueAsGuest = () => {
-    const guestUser = {
-      id: 'guest_' + Math.random().toString(36).substring(2, 9),
-      email: 'guest@azallabs.ai',
-      user_metadata: { name: 'زائر تجريبي' },
-      app_metadata: {},
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
-    } as unknown as User
-
-    setUser(guestUser)
-    localStorage.setItem('azal_guest_user', JSON.stringify(guestUser))
-  }
-
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signInWithOAuth, signOut, continueAsGuest }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signInWithOAuth, signOut }}>
       {children}
     </AuthContext.Provider>
   )

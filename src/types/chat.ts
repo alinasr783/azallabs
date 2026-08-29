@@ -15,6 +15,7 @@ export interface TaskSession {
   updatedAt: string
   messages: Message[]
   plan?: ClaudeTodoList | null
+  projectId?: string
 }
 
 // للتوافق العكسي

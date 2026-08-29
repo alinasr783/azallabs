@@ -1,8 +1,9 @@
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Trash2, LogOut, LogIn, X, Settings } from 'lucide-react'
+import { Plus, Trash2, LogOut, LogIn, X, Settings, FolderKanban } from 'lucide-react'
 import type { TaskSession } from '../../types/chat'
 import { useAuth } from '../../context/AuthContext'
+import { useProjects } from '../../context/ProjectContext'
 
 interface ChatSidebarProps {
   tasks: TaskSession[]
@@ -24,7 +25,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onToggleOpen,
 }) => {
   const { user, signOut } = useAuth()
+  const { activeProject, setActiveProjectId } = useProjects()
   const navigate = useNavigate()
+
+  // Filter tasks if inside a project
+  const displayedTasks = activeProject
+    ? tasks.filter((t) => t.projectId === activeProject.id)
+    : tasks
 
   return (
     <>
@@ -53,8 +60,39 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           </button>
         </div>
 
-        {/* New Task */}
-        <div className="p-2">
+        {/* Active Project Banner if in project */}
+        {activeProject && (
+          <div className="px-3 pt-2">
+            <div className="p-2 rounded-lg bg-[#1f2129] border border-[#2c2e3a] flex items-center justify-between text-xs">
+              <div
+                onClick={() => navigate(`/projects/${activeProject.id}`)}
+                className="flex items-center gap-2 min-w-0 cursor-pointer hover:text-[#cc785c] transition-colors"
+                title="عرض تفاصيل المشروع"
+              >
+                {activeProject.logoUrl ? (
+                  <img
+                    src={activeProject.logoUrl}
+                    alt={activeProject.name}
+                    className="w-5 h-5 rounded object-cover shrink-0"
+                  />
+                ) : (
+                  <FolderKanban className="w-4 h-4 text-[#cc785c] shrink-0" />
+                )}
+                <span className="font-bold truncate text-[#f3f3ee]">{activeProject.name}</span>
+              </div>
+              <button
+                onClick={() => setActiveProjectId(null)}
+                className="text-[10px] text-[#6b6e79] hover:text-[#f3f3ee] transition-colors"
+                title="الخروج من سياق المشروع وعرض كافة المحادثات العامة"
+              >
+                عام
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Actions: New Task & Projects */}
+        <div className="p-2 space-y-1.5">
           <button
             onClick={onNewTask}
             className="w-full py-2 px-3 rounded-lg bg-[#cc785c] hover:bg-[#be684e] text-white flex items-center justify-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
@@ -62,20 +100,29 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             <Plus className="w-3.5 h-3.5" />
             <span>مهمة جديدة</span>
           </button>
+
+          <Link
+            to="/projects"
+            className="w-full py-1.5 px-3 rounded-lg border border-[#2c2e3a] hover:border-[#cc785c]/60 bg-[#0d0e11] hover:bg-[#1f2129] text-[#f3f3ee] flex items-center justify-center gap-1.5 text-xs font-medium transition-colors"
+          >
+            <FolderKanban className="w-3.5 h-3.5 text-[#cc785c]" />
+            <span>المشاريع</span>
+          </Link>
         </div>
 
         {/* Sessions List */}
         <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
-          <div className="px-2 py-1.5 text-[10px] text-[#6b6e79] uppercase tracking-wider select-none">
-            الجلسات
+          <div className="px-2 py-1.5 text-[10px] text-[#6b6e79] uppercase tracking-wider select-none flex items-center justify-between">
+            <span>{activeProject ? `محادثات ${activeProject.name}` : 'الجلسات'}</span>
+            <span className="font-mono">{displayedTasks.length}</span>
           </div>
 
-          {tasks.length === 0 ? (
+          {displayedTasks.length === 0 ? (
             <div className="px-2 py-4 text-center text-[11px] text-[#4a4d58]">
               لا توجد جلسات سابقة
             </div>
           ) : (
-            tasks.map((task) => {
+            displayedTasks.map((task) => {
               const isSelected = currentTaskId === task.id
               return (
                 <div

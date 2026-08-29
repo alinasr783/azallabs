@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { PanelRight, Trash2, Settings } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { PanelRight, Trash2, Settings, FolderKanban } from 'lucide-react'
 import { ChatSidebar } from '../components/chat/ChatSidebar'
 import { ChatMessage } from '../components/chat/ChatMessage'
 import { ChatInput } from '../components/chat/ChatInput'
 import { EmptyState } from '../components/chat/EmptyState'
 import { useAgentConfig } from '../context/AgentConfigContext'
 import { useMcp } from '../context/McpContext'
+import { useProjects } from '../context/ProjectContext'
 import { getTickTickToken, fetchTickTickProjects, fetchTasksByProjectName, createTickTickTask, updateTickTickTask } from '../lib/ticktick'
+import { getVercelToken, isVercelConnected } from '../lib/vercelConnector'
 import { isComplexTask } from '../lib/orchestrator'
 import { runMultiAgentWorkflow } from '../lib/multiAgentOrchestrator'
 import { runTickTickIntent } from '../lib/ticktickIntent'
@@ -113,6 +115,9 @@ function extractTaskDetails(text: string): { title: string; dueDate?: string } {
 export const ChatPage: React.FC = () => {
   const { systemPrompt, llmConfig, setMemoryText } = useAgentConfig()
   const { servers, connectServer } = useMcp()
+  const { activeProject, activeProjectId, setActiveProjectId, projects } = useProjects()
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const [tasks, setTasks] = useState<TaskSession[]>([])
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(() =>
@@ -121,6 +126,38 @@ export const ChatPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Sync with search params (e.g. ?projectId=... or ?taskId=...)
+  useEffect(() => {
+    const projId = searchParams.get('projectId')
+    const taskId = searchParams.get('taskId')
+    const isNew = searchParams.get('new') === 'true'
+
+    if (projId && projId !== activeProjectId) {
+      setActiveProjectId(projId)
+    }
+
+    if (taskId) {
+      setCurrentTaskId(taskId)
+    } else if (isNew && projId) {
+      const targetProj = projects.find((p) => p.id === projId)
+      const newTask: TaskSession = {
+        id: 'task_' + Date.now(),
+        title: targetProj ? `مهمة ${targetProj.name}` : 'مهمة جديدة',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: [],
+        projectId: projId,
+      }
+      setTasks((prev) => {
+        const next = [newTask, ...prev]
+        localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(next))
+        return next
+      })
+      setCurrentTaskId(newTask.id)
+      setSearchParams({ projectId: projId })
+    }
+  }, [searchParams, activeProjectId, setActiveProjectId, projects, setSearchParams])
 
   // Claude Code Style ToDo List — attached PER-MESSAGE via message.plan
 
@@ -178,12 +215,14 @@ export const ChatPage: React.FC = () => {
   }, [messages, isLoading])
 
   const handleNewTask = () => {
+    const targetProj = activeProject || (currentTask?.projectId ? projects.find((p) => p.id === currentTask.projectId) : null)
     const newTask: TaskSession = {
       id: 'task_' + Date.now(),
-      title: 'مهمة جديدة',
+      title: targetProj ? `مهمة ${targetProj.name}` : 'مهمة جديدة',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       messages: [],
+      projectId: targetProj?.id || undefined,
     }
     const updated = [newTask, ...tasks]
     saveTasks(updated)
@@ -418,7 +457,29 @@ export const ChatPage: React.FC = () => {
       return
     }
 
-    if (isComplexTask(content) && !isTickTickIntent) {
+    // Check Vercel unauthenticated intent
+    const isVercelIntent =
+      (content.toLowerCase().includes('vercel') ||
+        content.includes('فيرسل') ||
+        content.includes('فرسل')) &&
+      !isTickTickIntent
+
+    if (isVercelIntent) {
+      const vToken = getVercelToken()
+      const vServer = servers.find(
+        (s) => s.service === 'vercel' || s.url.includes('vercel') || s.name.toLowerCase().includes('vercel')
+      )
+      if (!vToken && (!vServer || !vServer.authToken)) {
+        setAsstContent(
+          '⚠️ **خادم Vercel MCP غير مربوط حالياً.**\n\nللربط المباشر مع خادم `https://mcp.vercel.com` وإدارة مشاريعك وعمليات النشر وسجلات التشغيل، يرجى إدخال رمز الوصول الشخصي (Personal Access Token) عبر البطاقة التالية:\n\n:::mcp-connect\n{"name": "Vercel MCP", "url": "https://mcp.vercel.com", "service": "vercel"}\n:::\n',
+          true
+        )
+        setIsLoading(false)
+        return
+      }
+    }
+
+    if (isComplexTask(content) && !isTickTickIntent && !isVercelIntent) {
       try {
         let realTasksText = ''
         if (tickTickToken) {
@@ -544,6 +605,23 @@ export const ChatPage: React.FC = () => {
     let toolPrefix = ''
     let effectiveSystemPrompt = systemPrompt
 
+    // 0. Inject Active Project Context, Project Memory, and Project Files
+    const targetProject =
+      activeProject ||
+      (currentTask?.projectId ? projects.find((p) => p.id === currentTask.projectId) : null)
+
+    if (targetProject) {
+      const projectPromptBlock = `
+=== سياق المشروع المخصص: [${targetProject.name}] ===
+- وصف المشروع: ${targetProject.description || 'لا يوجد وصف مضاف'}
+${targetProject.websiteUrl ? `- رابط الموقع / الويب سايت: ${targetProject.websiteUrl}` : ''}
+${targetProject.projectMemory ? `\n=== ذاكرة المشروع الخاصة (Project Memory) ===\n${targetProject.projectMemory}\n` : ''}
+${targetProject.files && targetProject.files.length > 0 ? `\n=== ملفات ومستندات وأكواد المشروع المرفوعة ===\n${targetProject.files.map((f) => `- [${f.name}] (${(f.size / 1024).toFixed(1)} KB)${f.content ? `:\n${f.content.slice(0, 3500)}` : ''}`).join('\n')}\n` : ''}
+=== نهاية سياق المشروع ===
+`
+      effectiveSystemPrompt = `${projectPromptBlock}\n${effectiveSystemPrompt}`
+    }
+
     // 0. Auto-Discovery from MCP URL provided in chat
     const urlMatch = content.match(/https?:\/\/[^\s]+/i)
     let autoDiscoveredServer: any = null
@@ -609,6 +687,16 @@ export const ChatPage: React.FC = () => {
               lowerContent.includes('سؤال') ||
               lowerContent.includes('اسئلة') ||
               lowerContent.includes('بنك'))) ||
+          ((lowerS.includes('vercel') || lowerService.includes('vercel')) &&
+            (lowerContent.includes('vercel') ||
+              lowerContent.includes('فيرسل') ||
+              lowerContent.includes('فرسل') ||
+              lowerContent.includes('deploy') ||
+              lowerContent.includes('نشر') ||
+              lowerContent.includes('دومين') ||
+              lowerContent.includes('نطاق') ||
+              lowerContent.includes('analytics') ||
+              lowerContent.includes('سجلات'))) ||
           lowerContent.includes(lowerS) ||
           lowerContent.includes(lowerService) ||
           s.tools.some((t) => lowerContent.includes(t.name.toLowerCase()))
@@ -635,6 +723,8 @@ export const ChatPage: React.FC = () => {
         ? nonTickServers[0]
         : null)
 
+    const isVercelActive = isVercelConnected() || servers.some((s) => s.service === 'vercel' || s.url.includes('vercel'))
+
     const universalMcpContext = `
 === خوادم بروتوكول MCP المتصلة والمعتمدة في Azal Labs ===
 1. [خادم TickTick MCP]:
@@ -644,6 +734,11 @@ export const ChatPage: React.FC = () => {
 2. [خادم 800 Academy MCP]:
    - الحالة: متصل بالخادم المحلي (http://localhost:3000/mcp)
    - الصلاحيات: إدارة المنصة التعليمية وقاعدة البيانات، المدونة والمقالات (read_blogs, add_blog)، الامتحانات (read_exams, add_exam)، بنك الأسئلة (filter_questions)، الباقات والأسعار (list_offers, update_offer)، المناهج والدروس (list_subjects_full, list_units) (إجمالي 102 أداة كاملة).
+3. [خادم Vercel MCP]:
+   - الرابط: https://mcp.vercel.com
+   - الحالة: ${isVercelActive ? 'متصل ومفعّل برمز وصول شخصي' : 'متاح للربط عبر https://mcp.vercel.com'}
+   - الصلاحيات والأدوات: إدارة مشاريع Vercel، استعراض الفرق، فحص عمليات النشر (Deployments)، جلب سجلات البناء (Build logs)، قراءة سجلات التشغيل وأخطاء الدوال (Runtime logs / Errors)، تحليلات الويب (Web Analytics)، ومراقبة الوكلاء (Agent Runs)، وفحص النطاقات والمشتريات (إجمالي 23+ أداة كاملة).
+   - الأدوات الرئيسية: list_projects, list_teams, get_project, list_deployments, get_deployment, get_deployment_build_logs, get_runtime_logs, get_runtime_errors, get_web_analytics, list_agent_runs, search_vercel_documentation, check_domain_availability_and_price.
 
 === قواعد المصداقية والأمانة الصارمة (Strict Truthfulness - No Hallucination) ===
 1. ممنوع منعاً باتاً الادعاء أو الإخبار بأنك قمت بحذف أو إنشاء أو تعديل أي مشروع أو مهمة أو سجل ما لم تكن الأداة البرمجية الفعلية قد استُدعيت ورأيت نتيجتها الحقيقية المؤكدة.
@@ -1285,7 +1380,43 @@ ${toolsList}
           return lowerC.includes(tName.toLowerCase())
         })
 
-        if (explicitlyNamedTool) {
+        const isVercelServer =
+          matchedCustomServer.name.toLowerCase().includes('vercel') ||
+          matchedCustomServer.service === 'vercel' ||
+          (matchedCustomServer.url && matchedCustomServer.url.includes('vercel'))
+
+        if (isVercelServer) {
+          if (explicitlyNamedTool) {
+            targetToolName = typeof explicitlyNamedTool === 'string' ? explicitlyNamedTool : explicitlyNamedTool.name
+          } else if (lowerC.includes('team') || lowerC.includes('فريق') || lowerC.includes('فرق')) {
+            targetToolName = 'list_teams'
+          } else if (lowerC.includes('deploy') || lowerC.includes('نشر') || lowerC.includes('دبلوي')) {
+            if (lowerC.includes('log') || lowerC.includes('سجل') || lowerC.includes('بناء') || lowerC.includes('build')) {
+              targetToolName = 'get_deployment_build_logs'
+            } else {
+              targetToolName = 'list_deployments'
+            }
+          } else if (lowerC.includes('error') || lowerC.includes('خطأ') || lowerC.includes('أخطاء')) {
+            targetToolName = 'get_runtime_errors'
+          } else if (lowerC.includes('log') || lowerC.includes('سجل') || lowerC.includes('سجلات')) {
+            targetToolName = 'get_runtime_logs'
+          } else if (lowerC.includes('analytic') || lowerC.includes('تحليل') || lowerC.includes('زوار') || lowerC.includes('زيارات')) {
+            targetToolName = 'get_web_analytics'
+          } else if (lowerC.includes('domain') || lowerC.includes('نطاق') || lowerC.includes('دومين')) {
+            targetToolName = 'check_domain_availability_and_price'
+            const domainMatches = content.match(/([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/g)
+            if (domainMatches && domainMatches.length > 0) {
+              toolParams.names = domainMatches
+            }
+          } else if (lowerC.includes('agent') || lowerC.includes('وكيل') || lowerC.includes('runs')) {
+            targetToolName = 'list_agent_runs'
+          } else if (lowerC.includes('doc') || lowerC.includes('شرح') || lowerC.includes('توثيق') || lowerC.includes('ازاي') || lowerC.includes('كيف')) {
+            targetToolName = 'search_vercel_documentation'
+            toolParams.topic = content
+          } else {
+            targetToolName = 'list_projects'
+          }
+        } else if (explicitlyNamedTool) {
           targetToolName = typeof explicitlyNamedTool === 'string' ? explicitlyNamedTool : explicitlyNamedTool.name
           if (targetToolName === 'read_exams') {
             if (detectedSub) toolParams.subject_id = detectedSub.id
@@ -1546,7 +1677,7 @@ ${universalMcpContext}
       <main className="flex-1 flex flex-col h-full min-w-0">
         {/* ─── Header Bar (fixed, larger on mobile) ─── */}
         <header className="h-14 px-4 pt-[env(safe-area-inset-top)] border-b border-[#2c2e3a] bg-[#14151a] flex items-center justify-between select-none shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="md:hidden p-2 -mr-1.5 text-[#9da0a8] hover:text-[#f3f3ee] transition-colors cursor-pointer"
@@ -1555,6 +1686,27 @@ ${universalMcpContext}
               <PanelRight className="w-5 h-5" />
             </button>
             <span className="text-base font-bold text-[#f3f3ee] truncate">Azal Labs</span>
+
+            {/* Active Project Indicator Pill */}
+            {activeProject && (
+              <Link
+                to={`/projects/${activeProject.id}`}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1f2129] border border-[#2c2e3a] hover:border-[#cc785c]/60 text-xs text-[#f3f3ee] hover:text-[#cc785c] transition-colors truncate max-w-[160px] sm:max-w-[220px]"
+                title="مشروع نشط — اضغط لعرض ملفات وسياق وذاكرة المشروع"
+              >
+                {activeProject.logoUrl ? (
+                  <img
+                    src={activeProject.logoUrl}
+                    alt={activeProject.name}
+                    className="w-4 h-4 rounded object-cover shrink-0"
+                  />
+                ) : (
+                  <FolderKanban className="w-3.5 h-3.5 text-[#cc785c] shrink-0" />
+                )}
+                <span className="truncate font-bold">{activeProject.name}</span>
+              </Link>
+            )}
+
             {currentTask && (
               <span className="text-[11px] text-[#6b6e79] hidden sm:inline truncate">
                 — {currentTask.title}
@@ -1569,6 +1721,15 @@ ${universalMcpContext}
               className="px-2 py-1 text-[11px] text-[#6b6e79] hover:text-[#9da0a8] transition-colors"
             >
               {llmConfig.activeProvider}
+            </Link>
+
+            {/* Projects Hub Link */}
+            <Link
+              to="/projects"
+              className="p-2 text-[#6b6e79] hover:text-[#f3f3ee] transition-colors"
+              title="المشاريع"
+            >
+              <FolderKanban className="w-4 h-4" />
             </Link>
 
             {/* Clear */}

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { discoverMcpToolsFromUrl } from '../lib/mcpClient'
 import { clearTickTickToken } from '../lib/ticktick'
 import { clearSupabaseConnection } from '../lib/supabaseConnector'
+import { clearVercelToken } from '../lib/vercelConnector'
 
 export interface McpToolDefinition {
   name: string
@@ -147,10 +148,197 @@ export const SUPABASE_MCP_TOOLS: McpToolDefinition[] = [
   },
 ]
 
+// Vercel MCP Tools (Official Specification from https://mcp.vercel.com)
+export const VERCEL_MCP_TOOLS: McpToolDefinition[] = [
+  // 1. Documentation Tools
+  {
+    name: 'search_vercel_documentation',
+    description:
+      'البحث في توثيق Vercel الرسمي عن موضوعات وإرشادات محددة (مثل: routing, data-fetching, domains). المدخلات: topic (إلزامي)، tokens (افتراضي 2500).',
+  },
+
+  // 2. Project Management Tools
+  {
+    name: 'list_teams',
+    description:
+      'عرض واسترجاع كافة فرق العمل (Teams) التي ينتمي إليها المستخدم الموثق كعضو في Vercel مع المعرفات (team_...) والـ slugs.',
+  },
+  {
+    name: 'list_projects',
+    description:
+      'استعراض كافة مشاريع Vercel المرتبطة بالمستخدم أو الفريق. المدخلات: teamId (إلزامي: معرّف الفريق team_... أو الـ slug الخاص به، ويمكن جلبه عبر list_teams).',
+  },
+  {
+    name: 'get_project',
+    description:
+      'جلب معلومات تفصيلية عن مشروع Vercel محدد تشمل إطار العمل (Framework) والنطاقات وآخر عملية نشر. المدخلات: projectId (إلزامي: معرّف المشروع prj_... أو اسمه)، teamId (إلزامي).',
+  },
+
+  // 3. Deployment Tools
+  {
+    name: 'list_deployments',
+    description:
+      'عرض قائمة عمليات النشر (Deployments) لمشروع محدد مع تاريخ ووقت الإنشاء والحالة (READY, ERROR...) والهدف (production/preview). المدخلات: projectId (إلزامي)، teamId (إلزامي)، since (اختياري)، until (اختياري).',
+  },
+  {
+    name: 'get_deployment',
+    description:
+      'استرجاع تفاصيل كاملة لعملية نشر معينة بما فيها حالة البناء والمناطق والبيانات الوصفية. المدخلات: idOrUrl (إلزامي: معرف النشر dpl_... أو الرابط المضيف)، teamId (إلزامي).',
+  },
+  {
+    name: 'get_deployment_build_logs',
+    description:
+      'استرجاع سجلات البناء (Build logs) لعملية نشر معينة لتشخيص أخطاء التجميع. المدخلات: idOrUrl (إلزامي)، teamId (إلزامي)، direction (tail أو head، افتراضي tail)، errorsOnly (منطقي، افتراضي false)، limit (افتراضي 100)، since، until، buildId.',
+  },
+  {
+    name: 'get_runtime_logs',
+    description:
+      'استرجاع سجلات التشغيل الحية (Runtime logs) وتفاصيل console.log وأخطاء دوال Vercel Functions أثناء الطلبات مع إمكانية التصفية. المدخلات: projectId (إلزامي)، teamId (إلزامي)، deploymentId، environment (production/preview)، level (مصفوفة: error, warning, info)، statusCode، source، since (افتراضي 24h ago)، until (افتراضي now)، limit (افتراضي 50)، query، requestId، group_by.',
+  },
+  {
+    name: 'get_runtime_errors',
+    description:
+      'استرجاع مجموعات وأكواد أخطاء التشغيل المجمعة (Runtime error clusters) لمشروع معين لتشخيص أخطاء الإنتاج قبل فحص السجلات الفردية. المدخلات: projectId (إلزامي)، teamId (إلزامي)، since (افتراضي 24h ago)، until (افتراضي now)، routes.',
+  },
+  {
+    name: 'deploy_to_vercel',
+    description:
+      'نشر ملفات مشروع مباشرة إلى Vercel دون الحاجة لمستودع Git أو Vercel CLI. المدخلات: target (إلزامي: preview أو production)، name (اسم المشروع، إلزامي)، files (مصفوفة كائنات الملفات {file, data, encoding}، إلزامي)، teamId (اختياري)، projectSettings (إعدادات البناء: framework, buildCommand, installCommand...).',
+  },
+
+  // 4. Web Analytics Tools
+  {
+    name: 'get_web_analytics',
+    description:
+      'الاستعلام عن تحليلات زوار الموقع والصفحات والأحداث (Web Analytics) إما بنمط الإجمالي (count) أو التجميع حسب الأبعاد (aggregate). المدخلات: projectId (إلزامي)، teamId (اختياري)، dataset (visits أو events، افتراضي visits)، mode (count أو aggregate)، since، until، by (مصفوفة أبعاد مثل route, country, deviceType)، filter (مرشح OData)، limit (افتراضي 10).',
+  },
+
+  // 5. Agent Runs Observability Tools
+  {
+    name: 'list_agent_run_projects',
+    description:
+      'استعراض المشاريع التي تتضمن بيانات مراقبة وسجلات تشغيل لوكلاء الذكاء الاصطناعي المبنيين بإطار eve على Vercel مع معدلات مدد التشغيل. المدخلات: teamId (إلزامي)، environment (افتراضي production)، period (مثل 1d, 7d)، from، to.',
+  },
+  {
+    name: 'list_agent_runs',
+    description:
+      'عرض قائمة سجلات تشغيل الوكلاء الذكية (Agent Runs) لمشروع معين بما يشمل الملخصات والحالة والنموذج واستهلاك التوكنز. المدخلات: teamId (إلزامي)، projectId (إلزامي)، environment (افتراضي production)، period، from، to، page (افتراضي 1)، pageSize، search.',
+  },
+  {
+    name: 'get_agent_run',
+    description:
+      'استرجاع بيانات وصفية وأحداث تفصيلية لدورة تشغيل وكيل ذكي معينة (Agent Run). المدخلات: teamId (إلزامي)، projectId (إلزامي)، runId (معرف التشغيل wrun_...، إلزامي)، environment، period، from، to.',
+  },
+  {
+    name: 'get_agent_run_trace',
+    description:
+      'استرجاع التتبع الكامل لدورة تشغيل الوكيل الذكي (Trace) بما فيها أدوار المحادثة واستدلال النموذج واستدعاءات الأدوات وتفاصيل المدخلات والمخرجات. المدخلات: teamId (إلزامي)، projectId (إلزامي)، runId (إلزامي)، environment، period، from، to، maxFieldLength (افتراضي 8000).',
+  },
+
+  // 6. Domain Management Tools
+  {
+    name: 'check_domain_availability_and_price',
+    description:
+      'فحص توفر أسماء النطاقات للشراء والاستعلام عن أسعار تسجيلها في Vercel. المدخلات: names (مصفوفة بأسماء النطاقات المراد فحصها، إلزامي).',
+  },
+
+  // 7. Purchase Tools
+  {
+    name: 'get_purchase_quote',
+    description:
+      'الحصول على عرض سعر رسمي موثق (Quote) لأي عملية شراء (credits, domain, addon, pro) والحصول على مفتاح idempotencyKey المطلوب لتأكيد الشراء. المدخلات: product (إلزامي: credits, domain, addon, pro)، teamId (إلزامي)، creditType (v0, gateway, agent)، amount (بالدولار)، domain (اسم النطاق)، years (عدد السنوات)، autoRenew، productAlias، quantity.',
+  },
+  {
+    name: 'buy_pro',
+    description:
+      'ترقية حساب الفريق إلى اشتراك Vercel Pro الشهري المدفوع. يتطلب مفتاح idempotencyKey من get_purchase_quote وتأكيد صريح. المدخلات: teamId (إلزامي)، confirm (إلزامي true)، idempotencyKey (إلزامي).',
+  },
+  {
+    name: 'buy_credits',
+    description:
+      'شراء رصيد مسبق الدفع لـ AI Gateway أو v0 أو Vercel Agent بالدولار الكامل. المدخلات: creditType (v0, gateway, agent، إلزامي)، amount (مبلغ بالدولار 1-1000، إلزامي)، teamId (إلزامي)، confirm (إلزامي true)، idempotencyKey (إلزامي).',
+  },
+  {
+    name: 'buy_addon',
+    description:
+      'شراء إضافة أو ملحق لفريق Vercel (حالياً متاح ملحق siem لتفريغ السجلات). المدخلات: productAlias (إلزامي: siem)، quantity (الكمية، إلزامي)، teamId (إلزامي)، confirm (إلزامي true)، idempotencyKey (إلزامي).',
+  },
+  {
+    name: 'buy_domain',
+    description:
+      'تسجيل وشراء نطاق (Domain) محدد لفريق Vercel مع تزويد بيانات المسجل WHOIS وسعر التأكيد المقتبس. المدخلات: domain (إلزامي)، years (إلزامي)، autoRenew (افتراضي true)، expectedPrice (إلزامي من الكوتة)، contact (كائن بيانات المسجل: firstName, lastName, email, phone, address1, city, state, zip, country)، teamId (إلزامي)، confirm (إلزامي true)، idempotencyKey (إلزامي).',
+  },
+  {
+    name: 'get_domain_order',
+    description:
+      'الاستعلام عن حالة إتمام طلب شراء النطاق والتأكد من نجاح التسجيل غير المتزامن. المدخلات: orderId (إلزامي من buy_domain)، teamId (اختياري).',
+  },
+
+  // 8. Access Tools
+  {
+    name: 'get_access_to_vercel_url',
+    description:
+      'إنشاء رابط مشاركة مؤقت يمنح صلاحية الوصول إلى عمليات النشر المحمية بحماية Vercel Authentication. المدخلات: url (رابط النشر الكامل، إلزامي).',
+  },
+  {
+    name: 'web_fetch_vercel_url',
+    description:
+      'جلب المحتوى وقراءة الردود مباشرة من رابط نشر Vercel مع المصادقة التلقائية عند وجود حماية. المدخلات: url (الرابط الكامل متضمناً المسار، إلزامي).',
+  },
+
+  // 9. Design Import Tools
+  {
+    name: 'import-claude-design-from-url',
+    description:
+      'استيراد حزمة تصميم HTML مكتفية ذاتياً من Claude Design ونشرها مباشرة كمشروع في Vercel. المدخلات: url (رابط claudeusercontent.com عام صالح، إلزامي)، title (اختياري)، claude_design_project_id (اختياري).',
+  },
+
+  // 10. Toolbar Tools
+  {
+    name: 'list_toolbar_threads',
+    description:
+      'استعراض سلاسل تعليقات شريط أدوات Vercel Toolbar على عمليات النشر لفريق محدد. المدخلات: teamId (إلزامي)، projectId، branch، status (resolved أو unresolved، افتراضي unresolved)، page، search، limit (افتراضي 20)، offset.',
+  },
+  {
+    name: 'get_toolbar_thread',
+    description:
+      'استرجاع المحادثة الكاملة لسلسلة تعليقات في Vercel Toolbar بما فيها كافة الرسائل والسياق. المدخلات: threadId (إلزامي tbt_...)، teamId (إلزامي).',
+  },
+  {
+    name: 'change_toolbar_thread_resolve_status',
+    description:
+      'تغيير حالة حل سلسلة تعليقات في Vercel Toolbar (تحديدها كمنتهية أو إعادة فتحها). المدخلات: threadId (إلزامي)، teamId (إلزامي)، resolved (منطقي، إلزامي).',
+  },
+  {
+    name: 'reply_to_toolbar_thread',
+    description:
+      'إضافة رد جديد إلى محادثة أو سلسلة تعليقات في Vercel Toolbar بتنسيق Markdown. المدخلات: threadId (إلزامي)، teamId (إلزامي)، markdown (نص الرد، إلزامي).',
+  },
+  {
+    name: 'edit_toolbar_message',
+    description:
+      'تعديل محتوى رسالة موجودة مسبقاً في سلسلة تعليقات Vercel Toolbar. المدخلات: threadId (إلزامي)، messageId (معرف الرسالة msg_...، إلزامي)، teamId (إلزامي)، markdown (النص المحدث، إلزامي).',
+  },
+  {
+    name: 'add_toolbar_reaction',
+    description:
+      'إضافة تفاعل إيموجي (Emoji Reaction مثل 👍) على رسالة في Vercel Toolbar. المدخلات: threadId (إلزامي)، messageId (إلزامي)، teamId (إلزامي)، emoji (إلزامي).',
+  },
+
+  // 11. CLI Tools
+  {
+    name: 'use_vercel_cli',
+    description:
+      'توجيه النموذج لاستخدام أوامر Vercel CLI في سطر الأوامر مع راية --help للحصول على معلومات النشر والتحكم. المدخلات: action (ما تريد تحقيقه عبر CLI، إلزامي)، command (أمر Vercel CLI محدد، اختياري).',
+  },
+]
+
 // Default rich tool definitions for known services
 export const DEFAULT_TOOLS_BY_SERVICE: Record<string, McpToolDefinition[]> = {
   ticktick: TICKTICK_MCP_TOOLS,
   supabase: SUPABASE_MCP_TOOLS,
+  vercel: VERCEL_MCP_TOOLS,
+  'Vercel MCP': VERCEL_MCP_TOOLS,
   '800 Academy': [
     { name: 'update_package', description: 'تعديل بيانات وسعر وحالة وصلاحية باقات واشتراكات المواد في نظام 800 Academy وإرسال التغييرات مباشرة للخادم' },
     { name: 'create_package', description: 'إنشاء وإضافة باقة أو اشتراك جديد لمادة في نظام 800 Academy وإرسالها مباشرة للخادم' },
@@ -216,6 +404,18 @@ export const SUPABASE_SERVER: McpServer = {
   isEnabled: true,
   connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
   tools: SUPABASE_MCP_TOOLS,
+}
+
+// Vercel is surfaced as a connected MCP server directly via https://mcp.vercel.com
+export const VERCEL_SERVER: McpServer = {
+  id: 'mcp_vercel',
+  name: 'Vercel MCP',
+  url: 'https://mcp.vercel.com',
+  service: 'vercel',
+  status: 'connected',
+  isEnabled: true,
+  connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+  tools: VERCEL_MCP_TOOLS,
 }
 
 function normalizeTools(rawTools: (string | McpToolDefinition)[] = []): McpToolDefinition[] {
@@ -338,6 +538,12 @@ export const McpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         matchedTools = DEFAULT_TOOLS_BY_SERVICE.notion
       } else if (name.toLowerCase().includes('tick') || service.toLowerCase().includes('tick')) {
         matchedTools = DEFAULT_TOOLS_BY_SERVICE.ticktick
+      } else if (
+        name.toLowerCase().includes('vercel') ||
+        service.toLowerCase().includes('vercel') ||
+        url.toLowerCase().includes('vercel')
+      ) {
+        matchedTools = VERCEL_MCP_TOOLS
       } else {
         matchedTools = DEFAULT_TOOLS_BY_SERVICE.default
       }
@@ -411,6 +617,11 @@ export const McpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // If removing Supabase server, also clear credentials
     if (id === 'mcp_supabase' || target?.service === 'supabase' || target?.name.toLowerCase().includes('supabase')) {
       clearSupabaseConnection()
+    }
+
+    // If removing Vercel server, also clear token
+    if (id === 'mcp_vercel' || target?.service === 'vercel' || target?.name.toLowerCase().includes('vercel') || target?.url.includes('vercel')) {
+      clearVercelToken()
     }
 
     const updated = servers.filter((s) => s.id !== id)

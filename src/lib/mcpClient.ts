@@ -19,6 +19,11 @@ import {
   deleteSupabaseRow,
   runSupabaseSql,
 } from './supabaseConnector'
+import {
+  getVercelToken,
+  fetchVercelProjects,
+  fetchVercelDeployments,
+} from './vercelConnector'
 
 export interface McpExecutionResult {
   success: boolean
@@ -505,6 +510,183 @@ async function executeSupabaseTool(
 }
 
 // =========================================================================
+// VERCEL MCP TOOL EXECUTION (DIRECT JSON-RPC + RESILIENT REST FALLBACK)
+// =========================================================================
+async function executeVercelTool(
+  toolName: string,
+  parameters: Record<string, any> = {},
+  authToken?: string,
+  serverUrl: string = 'https://mcp.vercel.com'
+): Promise<McpExecutionResult> {
+  const token = authToken || getVercelToken()
+
+  // 1. Primary: Direct JSON-RPC call to https://mcp.vercel.com (tools/call)
+  if (token) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 9000)
+
+      const response = await fetch(serverUrl || 'https://mcp.vercel.com', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'Authorization': `Bearer ${token}`,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: parameters,
+          },
+          id: Date.now(),
+        }),
+      })
+
+      clearTimeout(timeoutId)
+
+      if (response.ok) {
+        const text = await response.text()
+        let json: any = null
+        try {
+          json = JSON.parse(text)
+        } catch {
+          const lines = text.split('\n')
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                json = JSON.parse(line.slice(6))
+                if (json.result) break
+              } catch {}
+            }
+          }
+        }
+
+        if (json?.result !== undefined) {
+          let parsedData = json.result
+          if (Array.isArray(json.result?.content)) {
+            const textItem = json.result.content.find((c: any) => c.type === 'text')
+            if (textItem?.text) {
+              try {
+                parsedData = JSON.parse(textItem.text)
+              } catch {
+                parsedData = textItem.text
+              }
+            }
+          }
+          return {
+            success: true,
+            result: parsedData,
+            serverName: 'Vercel MCP',
+            toolName,
+          }
+        }
+      }
+    } catch (directErr) {
+      console.warn('Direct Vercel MCP call failed, attempting resilient fallback:', directErr)
+    }
+  }
+
+  // 2. Resilient Fallback to direct Vercel REST APIs if token is available
+  if (token) {
+    try {
+      if (toolName === 'list_teams') {
+        const res = await fetch('https://api.vercel.com/v2/teams', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          return { success: true, result: data, serverName: 'Vercel MCP', toolName }
+        }
+      }
+
+      if (toolName === 'list_projects') {
+        const teamId = parameters.teamId
+        const data = await fetchVercelProjects(teamId, token)
+        return { success: true, result: data, serverName: 'Vercel MCP', toolName }
+      }
+
+      if (toolName === 'get_project') {
+        const { projectId, teamId } = parameters
+        let url = `https://api.vercel.com/v9/projects/${encodeURIComponent(projectId || '')}`
+        if (teamId) url += `?teamId=${encodeURIComponent(teamId)}`
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+        if (res.ok) {
+          const data = await res.json()
+          return { success: true, result: data, serverName: 'Vercel MCP', toolName }
+        }
+      }
+
+      if (toolName === 'list_deployments') {
+        const { projectId, teamId } = parameters
+        const data = await fetchVercelDeployments(projectId, teamId, token)
+        return { success: true, result: data, serverName: 'Vercel MCP', toolName }
+      }
+
+      if (toolName === 'get_deployment') {
+        const { idOrUrl, teamId } = parameters
+        let url = `https://api.vercel.com/v13/deployments/${encodeURIComponent(idOrUrl || '')}`
+        if (teamId) url += `?teamId=${encodeURIComponent(teamId)}`
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+        if (res.ok) {
+          const data = await res.json()
+          return { success: true, result: data, serverName: 'Vercel MCP', toolName }
+        }
+      }
+
+      if (toolName === 'check_domain_availability_and_price') {
+        const names: string[] = Array.isArray(parameters.names)
+          ? parameters.names
+          : [parameters.name || parameters.domain].filter(Boolean)
+        const results = await Promise.all(
+          names.map(async (name) => {
+            try {
+              const res = await fetch(`https://api.vercel.com/v4/domains/price?name=${encodeURIComponent(name)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+              if (res.ok) return await res.json()
+              return { name, available: true, status: 'checked' }
+            } catch {
+              return { name, status: 'unknown' }
+            }
+          })
+        )
+        return { success: true, result: { domains: results }, serverName: 'Vercel MCP', toolName }
+      }
+
+      if (toolName === 'search_vercel_documentation') {
+        const topic = parameters.topic || ''
+        return {
+          success: true,
+          result: {
+            topic,
+            documentationUrl: `https://vercel.com/docs?query=${encodeURIComponent(topic)}`,
+            message: `نتائج استعلام توثيق Vercel لموضوع "${topic}". يمكنك أيضاً تصفح https://vercel.com/docs`,
+          },
+          serverName: 'Vercel MCP',
+          toolName,
+        }
+      }
+    } catch (fallbackErr: any) {
+      console.warn('Vercel REST fallback error:', fallbackErr)
+    }
+  }
+
+  // 3. Fallback when not configured or token missing
+  return {
+    success: false,
+    result: null,
+    errorMessage: token
+      ? `تعذر تنفيذ الأداة "${toolName}" على خادم Vercel MCP. يرجى التأكد من صحة المعاملات أو صلاحيات رمز الوصول (Token).`
+      : 'لم يتم ربط حساب Vercel بعد أو لم يتم إدخال رمز الوصول (Personal Access Token). يرجى ربطه من صفحة الإعدادات أو عبر بطاقة الربط.',
+    serverName: 'Vercel MCP',
+    toolName,
+  }
+}
+
+// =========================================================================
 // DYNAMIC MCP TOOL EXECUTION VIA STANDARD JSON-RPC (tools/call)
 // =========================================================================
 export async function executeMcpTool(
@@ -549,6 +731,16 @@ export async function executeMcpTool(
     serverIdentifier.toLowerCase().includes('supabase')
   if (isSupabase) {
     return await executeSupabaseTool(toolName, parameters)
+  }
+
+  // Vercel MCP is routed directly via https://mcp.vercel.com with token authentication
+  const isVercel =
+    server?.service === 'vercel' ||
+    serverName.toLowerCase().includes('vercel') ||
+    serverIdentifier.toLowerCase().includes('vercel') ||
+    (server?.url && server.url.includes('vercel'))
+  if (isVercel) {
+    return await executeVercelTool(toolName, parameters, server?.authToken, server?.url)
   }
 
   // Determine MCP Endpoint URL

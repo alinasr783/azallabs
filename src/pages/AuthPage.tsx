@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import type { OAuthProvider } from '../context/AuthContext'
@@ -51,7 +51,7 @@ export const AuthPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  const { user, signIn, signUp, signInWithOAuth, continueAsGuest } = useAuth()
+  const { user, signIn, signUp, signInWithOAuth } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -83,8 +83,8 @@ export const AuthPage: React.FC = () => {
         if (error) {
           setErrorMsg(error.message || 'حدث خطأ أثناء إنشاء الحساب.')
         } else {
-          setSuccessMsg('تم إنشاء الحساب بنجاح.')
-          setTimeout(() => navigate('/'), 600)
+          setSuccessMsg('تم إنشاء الحساب وتسجيل الدخول بنجاح.')
+          setTimeout(() => navigate('/'), 400)
         }
       } else {
         const { error } = await signIn(email, password)
@@ -92,7 +92,7 @@ export const AuthPage: React.FC = () => {
           setErrorMsg(error.message || 'بيانات الدخول غير صحيحة.')
         } else {
           setSuccessMsg('تم تسجيل الدخول بنجاح.')
-          setTimeout(() => navigate('/'), 600)
+          setTimeout(() => navigate('/'), 400)
         }
       }
     } catch (err: any) {
@@ -100,11 +100,6 @@ export const AuthPage: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleGuest = () => {
-    continueAsGuest()
-    navigate('/')
   }
 
   const handleOAuth = async (provider: OAuthProvider) => {
@@ -231,21 +226,11 @@ export const AuthPage: React.FC = () => {
             {/* Divider */}
             <div className="border-t border-[#2c2e3a] my-3" />
 
-            {/* Guest & Back */}
-            <div className="flex flex-col gap-2 text-center">
-              <button
-                type="button"
-                onClick={handleGuest}
-                className="text-[11px] text-[#6b6e79] hover:text-[#9da0a8] transition-colors cursor-pointer"
-              >
-                المتابعة كزائر
-              </button>
-              <Link
-                to="/"
-                className="text-[11px] text-[#4a4d58] hover:text-[#6b6e79] transition-colors"
-              >
-                ← العودة
-              </Link>
+            {/* Mandatory login notice */}
+            <div className="text-center pt-1">
+              <span className="text-[11px] text-[#6b6e79]">
+                جميع بياناتك ومشاريعك مشفرة ومحفوظة بحسابك بشكل آمن.
+              </span>
             </div>
           </div>
         </div>

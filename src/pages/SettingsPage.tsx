@@ -20,7 +20,7 @@ import {
   FileCode,
   Database,
 } from 'lucide-react'
-import { useMcp, type McpToolDefinition } from '../context/McpContext'
+import { useMcp, type McpToolDefinition, VERCEL_MCP_TOOLS } from '../context/McpContext'
 import { useAgentConfig } from '../context/AgentConfigContext'
 import { streamUnifiedLlmCompletion } from '../lib/llm/llmService'
 import {
@@ -38,6 +38,13 @@ import {
   isSupabaseConnected,
   listSupabaseTables,
 } from '../lib/supabaseConnector'
+import {
+  getVercelToken,
+  setVercelToken,
+  clearVercelToken,
+  isVercelConnected,
+  testVercelConnection,
+} from '../lib/vercelConnector'
 
 const GEMINI_MODELS = [
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', desc: 'Recommended, ultra-fast & responsive' },
@@ -393,6 +400,123 @@ export const SettingsPage: React.FC = () => {
       setIsTestingSupabase(false)
       setTimeout(() => setSupabaseStatusMsg(null), 6000)
     }
+  }
+
+  // Vercel connection state
+  const [vercelTokenInput, setVercelTokenInput] = useState(getVercelToken() || '')
+  const [vercelStatusMsg, setVercelStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [isTestingVercel, setIsTestingVercel] = useState(false)
+  const [isConnectingVercel, setIsConnectingVercel] = useState(false)
+  const [showVercelTools, setShowVercelTools] = useState(false)
+  const [vercelCategoryFilter, setVercelCategoryFilter] = useState<string>('all')
+
+  const isVercelServerConnected =
+    isVercelConnected() ||
+    servers.some(
+      (s) =>
+        s.service === 'vercel' ||
+        s.url.includes('vercel') ||
+        s.name.toLowerCase().includes('vercel')
+    )
+
+  const handleConnectVercel = async () => {
+    setVercelStatusMsg(null)
+    const token = vercelTokenInput.trim()
+    if (!token) {
+      setVercelStatusMsg({
+        type: 'error',
+        text: 'يرجى إدخال رمز الوصول الشخصي (Personal Access Token) من إعدادات حساب Vercel.',
+      })
+      return
+    }
+
+    setIsConnectingVercel(true)
+    try {
+      setVercelToken(token)
+      await connectServer({
+        name: 'Vercel MCP',
+        url: 'https://mcp.vercel.com',
+        service: 'vercel',
+        authToken: token,
+        tools: VERCEL_MCP_TOOLS,
+        isEnabled: true,
+      })
+
+      const testRes = await testVercelConnection(token)
+      if (testRes.success) {
+        const teamsInfo =
+          testRes.teams && testRes.teams.length > 0
+            ? ` — الفرق المتاحة: ${testRes.teams.map((t) => t.name).join(', ')}`
+            : ''
+        setVercelStatusMsg({
+          type: 'success',
+          text: `تم ربط خادم Vercel MCP بنجاح ✔ تم التعرف على حساب: ${testRes.user?.username || testRes.user?.email || 'المستخدم'}${teamsInfo} وتفعيل 23+ أداة.`,
+        })
+      } else {
+        setVercelStatusMsg({
+          type: 'success',
+          text: 'تم حفظ رمز Vercel وربط خادم Vercel MCP (https://mcp.vercel.com) بنجاح مع 23+ أداة.',
+        })
+      }
+    } catch (err: any) {
+      setVercelStatusMsg({ type: 'error', text: `فشل الربط: ${err.message}` })
+    } finally {
+      setIsConnectingVercel(false)
+      setTimeout(() => setVercelStatusMsg(null), 6000)
+    }
+  }
+
+  const handleDisconnectVercel = async () => {
+    clearVercelToken()
+    setVercelTokenInput('')
+    const vServer = servers.find(
+      (s) =>
+        s.service === 'vercel' ||
+        s.url.includes('vercel') ||
+        s.name.toLowerCase().includes('vercel')
+    )
+    if (vServer) {
+      await disconnectServer(vServer.id)
+    }
+    setVercelStatusMsg({
+      type: 'success',
+      text: 'تم قطع الاتصال بخادم Vercel MCP وإزالة بيانات الربط من المتصفح.',
+    })
+    setTimeout(() => setVercelStatusMsg(null), 4000)
+  }
+
+  const handleTestVercel = async () => {
+    setIsTestingVercel(true)
+    setVercelStatusMsg(null)
+    try {
+      const res = await testVercelConnection(vercelTokenInput.trim() || undefined)
+      if (res.success) {
+        const teamsStr =
+          res.teams && res.teams.length > 0 ? ` (الفرق: ${res.teams.map((t) => t.slug).join(', ')})` : ''
+        setVercelStatusMsg({
+          type: 'success',
+          text: `الاتصال بـ Vercel نشط وموثوق ✔ حساب: ${res.user?.username || res.user?.email || 'Vercel'}${teamsStr}. كافة أدوات Vercel MCP جاهزة للاستخدام!`,
+        })
+      } else {
+        setVercelStatusMsg({ type: 'error', text: res.error || 'فشل التحقق من رمز Vercel.' })
+      }
+    } catch (err: any) {
+      setVercelStatusMsg({ type: 'error', text: `خطأ أثناء الفحص: ${err.message}` })
+    } finally {
+      setIsTestingVercel(false)
+      setTimeout(() => setVercelStatusMsg(null), 6000)
+    }
+  }
+
+  const handleAddVercelPreset = async () => {
+    await connectServer({
+      name: 'Vercel MCP',
+      url: 'https://mcp.vercel.com',
+      service: 'vercel',
+      authToken: getVercelToken() || undefined,
+      tools: VERCEL_MCP_TOOLS,
+      isEnabled: true,
+    })
   }
 
   const handleAddCustomServer = async (e: React.FormEvent) => {
@@ -1501,6 +1625,268 @@ export const SettingsPage: React.FC = () => {
               </div>
             </section>
 
+            {/* Vercel MCP Integration Section */}
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-base font-semibold text-[#f3f3ee] flex items-center gap-2">
+                  <span>التكامل مع (Vercel) عبر خادم (MCP)</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1b1c24] text-[#9da0a8] border border-[#2c2e3a]">
+                    https://mcp.vercel.com
+                  </span>
+                </h2>
+                <p className="text-xs text-[#9da0a8] mt-1">
+                  ربط حسابك ومشاريعك في Vercel مباشرة لإدارة النشر، فحص السجلات وتشخيص الأخطاء، استعلام تحليلات الويب، ومراقبة الوكلاء (Agent Runs).
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl border border-[#262833] bg-[#14151a] shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-white/10 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                      ▲
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#f3f3ee] flex items-center gap-2">
+                        <span>خادم (Vercel MCP)</span>
+                        <span
+                          className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${
+                            isVercelServerConnected
+                              ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                              : 'bg-[#1e1f28] text-[#9da0a8] border border-[#2c2e3a]'
+                          }`}
+                        >
+                          {isVercelServerConnected ? 'متصل ومتزامن' : 'جاهز للربط'}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-[#9da0a8] mt-0.5">
+                        رابط الخادم: <code>https://mcp.vercel.com</code> (23+ أداة متكاملة)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isVercelServerConnected ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleTestVercel}
+                          disabled={isTestingVercel}
+                          className="px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-xs cursor-pointer"
+                        >
+                          {isTestingVercel ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Server className="w-3.5 h-3.5" />
+                          )}
+                          <span>اختبار الاتصال</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDisconnectVercel}
+                          className="px-3.5 py-1.5 rounded-full border border-red-900/40 text-red-400 hover:bg-red-950/30 text-xs font-medium transition-colors cursor-pointer"
+                        >
+                          قطع الاتصال
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleConnectVercel}
+                        disabled={isConnectingVercel || !vercelTokenInput.trim()}
+                        className="px-4 py-2 rounded-full bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-40"
+                      >
+                        {isConnectingVercel ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Link2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>حفظ والاتصال بـ Vercel MCP</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {vercelStatusMsg && (
+                  <div
+                    className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                      vercelStatusMsg.type === 'success'
+                        ? 'bg-emerald-950/40 border border-emerald-800 text-emerald-300'
+                        : 'bg-red-950/40 border border-red-800 text-red-300'
+                    }`}
+                  >
+                    {vercelStatusMsg.type === 'success' ? (
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+                    )}
+                    <span>{vercelStatusMsg.text}</span>
+                  </div>
+                )}
+
+                {/* Token Input Section */}
+                <div className="p-3.5 rounded-xl bg-[#0d0e11] border border-[#2c2e3a] space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-[#9da0a8]">
+                    <span>رمز الوصول الشخصي (Vercel Personal Access Token):</span>
+                    <a
+                      href="https://vercel.com/account/tokens"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#cc785c] hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <span>إنشاء رمز جديد من لوحة تحكم Vercel</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={vercelTokenInput}
+                      onChange={(e) => setVercelTokenInput(e.target.value)}
+                      placeholder="vercel_... أو الصق رمز الوصول الخاص بك هنا"
+                      className="flex-1 px-3.5 py-2 rounded-xl border border-[#2c2e3a] bg-[#14151a] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none font-mono"
+                    />
+                    {!isVercelServerConnected && (
+                      <button
+                        type="button"
+                        onClick={handleConnectVercel}
+                        disabled={isConnectingVercel || !vercelTokenInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                      >
+                        {isConnectingVercel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        <span>ربط</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Interactive Tools Explorer */}
+                <div className="border-t border-[#262833] pt-3">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setShowVercelTools(!showVercelTools)}
+                      className="text-xs text-[#cc785c] hover:text-[#f3f3ee] transition-colors flex items-center gap-1.5 font-medium cursor-pointer"
+                    >
+                      <span>{showVercelTools ? 'إخفاء مستعرض الأدوات' : `استعراض أدوات Vercel MCP المتوفرة (${VERCEL_MCP_TOOLS.length} أداة)`}</span>
+                      {showVercelTools ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                    <span className="text-[11px] text-[#6b6e79]">
+                      بروتوكول MCP قياسي عبر HTTPS
+                    </span>
+                  </div>
+
+                  {showVercelTools && (
+                    <div className="mt-3 space-y-3">
+                      {/* Filter Chips */}
+                      <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        {[
+                          { id: 'all', label: 'الكل (23+)' },
+                          { id: 'projects', label: 'المشاريع والفرق' },
+                          { id: 'deployments', label: 'النشر والسجلات' },
+                          { id: 'analytics', label: 'تحليلات الويب' },
+                          { id: 'agent_runs', label: 'مراقبة الوكلاء' },
+                          { id: 'domains', label: 'النطاقات والمشتريات' },
+                          { id: 'toolbar', label: 'شريط الأدوات' },
+                          { id: 'docs', label: 'التوثيق والـ CLI' },
+                        ].map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setVercelCategoryFilter(cat.id)}
+                            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                              vercelCategoryFilter === cat.id
+                                ? 'bg-[#cc785c] text-white font-medium'
+                                : 'bg-[#1b1c24] text-[#9da0a8] hover:text-[#f3f3ee]'
+                            }`}
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Filtered Tools Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
+                        {VERCEL_MCP_TOOLS.filter((tool) => {
+                          if (vercelCategoryFilter === 'projects')
+                            return ['list_teams', 'list_projects', 'get_project'].includes(tool.name)
+                          if (vercelCategoryFilter === 'deployments')
+                            return [
+                              'list_deployments',
+                              'get_deployment',
+                              'get_deployment_build_logs',
+                              'get_runtime_logs',
+                              'get_runtime_errors',
+                              'deploy_to_vercel',
+                            ].includes(tool.name)
+                          if (vercelCategoryFilter === 'analytics')
+                            return ['get_web_analytics'].includes(tool.name)
+                          if (vercelCategoryFilter === 'agent_runs')
+                            return [
+                              'list_agent_run_projects',
+                              'list_agent_runs',
+                              'get_agent_run',
+                              'get_agent_run_trace',
+                            ].includes(tool.name)
+                          if (vercelCategoryFilter === 'domains')
+                            return [
+                              'check_domain_availability_and_price',
+                              'get_purchase_quote',
+                              'buy_pro',
+                              'buy_credits',
+                              'buy_addon',
+                              'buy_domain',
+                              'get_domain_order',
+                            ].includes(tool.name)
+                          if (vercelCategoryFilter === 'toolbar')
+                            return [
+                              'list_toolbar_threads',
+                              'get_toolbar_thread',
+                              'change_toolbar_thread_resolve_status',
+                              'reply_to_toolbar_thread',
+                              'edit_toolbar_message',
+                              'add_toolbar_reaction',
+                            ].includes(tool.name)
+                          if (vercelCategoryFilter === 'docs')
+                            return [
+                              'search_vercel_documentation',
+                              'use_vercel_cli',
+                              'get_access_to_vercel_url',
+                              'web_fetch_vercel_url',
+                              'import-claude-design-from-url',
+                            ].includes(tool.name)
+                          return true
+                        }).map((tool) => (
+                          <div
+                            key={tool.name}
+                            className="p-2.5 rounded-xl border border-[#22242c] bg-[#111216] space-y-1 text-right"
+                          >
+                            <div className="flex items-center justify-between">
+                              <code className="text-[11px] text-[#cc785c] font-mono font-semibold">
+                                {tool.name}
+                              </code>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1f28] text-[#9da0a8]">
+                                Tool
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#9da0a8] leading-relaxed">
+                              {tool.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#16171d] border border-[#262833] text-[10px] text-[#9da0a8] leading-relaxed space-y-1">
+                  <p className="font-semibold text-[#f3f3ee]">💡 كيف تستخدم Vercel MCP عبر المحادثة:</p>
+                  <p>
+                    بمجرد الربط، يمكنك توجيه الأسئلة والأوامر للوكيل مباشرة، مثل: «اعرض لي قائمة مشاريعي على Vercel»، «ما هي حالة آخر نشر لمشروعي؟»، «هل هناك أخطاء في الـ Runtime logs لآخر 24 ساعة؟»، «تحقق من سعر وتوفر النطاق example.com»، أو «ابحث في توثيق Vercel عن كيفية إعداد النطاقات المخصصة».
+                  </p>
+                </div>
+              </div>
+            </section>
+
             {/* Connected MCP Servers List */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
@@ -1513,16 +1899,29 @@ export const SettingsPage: React.FC = () => {
                   </p>
                 </div>
 
-                {!servers.some((s) => s.name.includes('800 Academy')) && (
-                  <button
-                    type="button"
-                    onClick={handleAdd800AcademyPreset}
-                    className="px-3 py-1.5 rounded-full border border-[#cc785c]/40 text-[#cc785c] hover:bg-[#cc785c]/10 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة خادم (800 Academy MCP) (قالب جاهز)</span>
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {!servers.some((s) => s.name.toLowerCase().includes('vercel') || s.service === 'vercel') && (
+                    <button
+                      type="button"
+                      onClick={handleAddVercelPreset}
+                      className="px-3 py-1.5 rounded-full border border-white/20 text-[#f3f3ee] hover:bg-white/10 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة خادم (Vercel MCP)</span>
+                    </button>
+                  )}
+
+                  {!servers.some((s) => s.name.includes('800 Academy')) && (
+                    <button
+                      type="button"
+                      onClick={handleAdd800AcademyPreset}
+                      className="px-3 py-1.5 rounded-full border border-[#cc785c]/40 text-[#cc785c] hover:bg-[#cc785c]/10 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة خادم (800 Academy MCP)</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-3">

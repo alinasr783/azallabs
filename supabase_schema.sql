@@ -133,3 +133,22 @@ CREATE POLICY "Allow all for conversations" ON public.conversations FOR ALL USIN
 
 DROP POLICY IF EXISTS "Allow all for messages" ON public.messages;
 CREATE POLICY "Allow all for messages" ON public.messages FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. جدول المشاريع (Projects)
+CREATE TABLE IF NOT EXISTS public.projects (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    website_url TEXT,
+    logo_url TEXT,
+    project_memory TEXT DEFAULT '',
+    files JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for projects" ON public.projects;
+CREATE POLICY "Allow all for projects" ON public.projects FOR ALL USING (true) WITH CHECK (true);
+
