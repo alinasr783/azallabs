@@ -171,7 +171,14 @@ export async function runGitHubIntent(
   if (repoTools.includes(tool)) {
     try {
       const cleanContent = content.replace(/(github|جيتهاب|جيت هاب|مستودع|المستودع|مشاكل|issues|commits|pulls|branches)/gi, '').trim()
-      const resolved = await resolveGitHubContext(token, params.repo || cleanContent || undefined)
+      let contextStr = cleanContent
+      if (!params.repo && _existingMsgs && _existingMsgs.length > 0) {
+        // Look back up to 3 messages to find recently discussed repository names
+        const recentHistory = _existingMsgs.slice(-3).map((m: any) => typeof m.content === 'string' ? m.content : '').join(' ')
+        contextStr = cleanContent + ' ' + recentHistory
+      }
+      
+      const resolved = await resolveGitHubContext(token, params.repo || contextStr || undefined)
       if (resolved.owner) params.owner = resolved.owner
       if (resolved.repo) params.repo = resolved.repo
       if (resolved.fullName) params.fullName = resolved.fullName
