@@ -1,13 +1,20 @@
-export const TICKTICK_CLIENT_ID = import.meta.env.VITE_TICKTICK_CLIENT_ID || ''
+export const TICKTICK_CLIENT_ID =
+  import.meta.env.VITE_TICKTICK_CLIENT_ID || 'NyT9Pw0XECzMt9bE9W'
 
-export const TICKTICK_CLIENT_SECRET = import.meta.env.VITE_TICKTICK_CLIENT_SECRET || ''
+export const TICKTICK_CLIENT_SECRET =
+  import.meta.env.VITE_TICKTICK_CLIENT_SECRET || 'f7Om169Pks8F83Ma1Ofs7tHdAgaOA4V1'
+
 export const getRedirectUri = () => {
-  // Allow forcing the canonical production URL via VITE_APP_URL (useful behind
-  // proxies / when window.location.origin is not the public domain).
-  const base =
-    import.meta.env.VITE_APP_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5174')
-  return `${base}/auth/ticktick/callback`
+  if (typeof window !== 'undefined') {
+    // If running locally, always use current active localhost origin
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return `${window.location.origin}/auth/ticktick/callback`
+    }
+    // In production, use VITE_APP_URL if defined, otherwise current origin
+    const base = import.meta.env.VITE_APP_URL || window.location.origin
+    return `${base}/auth/ticktick/callback`
+  }
+  return `${import.meta.env.VITE_APP_URL || 'http://localhost:5174'}/auth/ticktick/callback`
 }
 
 export const TICKTICK_TOKEN_KEY = 'azal_ticktick_access_token'

@@ -18,11 +18,19 @@ import {
   Copy,
   Terminal,
   FileCode,
+  Database,
 } from 'lucide-react'
 import { useMcp, type McpToolDefinition } from '../context/McpContext'
 import { useAgentConfig } from '../context/AgentConfigContext'
 import { streamUnifiedLlmCompletion } from '../lib/llm/llmService'
-import { getTickTickAuthUrl, getTickTickToken, clearTickTickToken, createTickTickTask } from '../lib/ticktick'
+import {
+  getTickTickAuthUrl,
+  getTickTickToken,
+  clearTickTickToken,
+  createTickTickTask,
+  getRedirectUri,
+  setTickTickToken,
+} from '../lib/ticktick'
 import {
   getSupabaseConnection,
   setSupabaseConnection,
@@ -282,8 +290,27 @@ export const SettingsPage: React.FC = () => {
     }
   }
 
+  const [manualTickTickToken, setManualTickTickToken] = useState('')
+  const [showManualTickTickInput, setShowManualTickTickInput] = useState(false)
+  const [manualTickTickSaved, setManualTickTickSaved] = useState(false)
+
   const handleConnectTickTick = () => {
     window.location.href = getTickTickAuthUrl()
+  }
+
+  const handleSaveManualTickTickToken = async () => {
+    if (!manualTickTickToken.trim()) return
+    setTickTickToken(manualTickTickToken.trim())
+    await connectServer({
+      name: 'TickTick MCP',
+      url: 'https://mcp.ticktick.com',
+      service: 'ticktick',
+      authToken: manualTickTickToken.trim(),
+    })
+    setManualTickTickSaved(true)
+    setTimeout(() => {
+      window.location.reload()
+    }, 600)
   }
 
   const handleDisconnectTickTick = async () => {
@@ -1250,20 +1277,64 @@ export const SettingsPage: React.FC = () => {
                         </button>
                       </>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={handleConnectTickTick}
-                        className="px-4 py-2 rounded-full bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>ربط الحساب عبر التوثيق السريع (OAuth)</span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleConnectTickTick}
+                          className="px-4 py-2 rounded-lg bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>ربط الحساب عبر التوثيق السريع (OAuth)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowManualTickTickInput(!showManualTickTickInput)}
+                          className="px-3 py-2 rounded-lg border border-[#2c2e3a] text-xs text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#1a1b22] transition-colors cursor-pointer"
+                        >
+                          {showManualTickTickInput ? 'إخفاء حقل المفتاح' : 'أو إدخال المفتاح (Token) يدوياً'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
 
+                {/* Manual Token Input */}
+                {showManualTickTickInput && !isTickTickConnected && (
+                  <div className="p-3 rounded-lg bg-[#0d0e11] border border-[#2c2e3a] space-y-2">
+                    <div className="text-[11px] text-[#9da0a8]">
+                      إذا كنت تواجه قيوداً في الـ OAuth، يمكنك نسخ مفتاح (API Token) مباشرة من إعدادات الويب في (TickTick):
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        value={manualTickTickToken}
+                        onChange={(e) => setManualTickTickToken(e.target.value)}
+                        placeholder="الصق المفتاح (Token) هنا..."
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-[#2c2e3a] bg-[#14151a] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveManualTickTickToken}
+                        disabled={!manualTickTickToken.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                      >
+                        {manualTickTickSaved ? <Check className="w-3.5 h-3.5" /> : null}
+                        <span>{manualTickTickSaved ? 'تم الحفظ!' : 'حفظ والاتصال'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Redirect URI Info */}
+                <div className="mt-2 pt-2 border-t border-[#2c2e3a] text-[11px] text-[#6b6e79] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                  <span>رابط إعادة التوجيه الفعّال (Redirect URL):</span>
+                  <code className="px-2 py-0.5 rounded bg-[#0d0e11] text-[#cc785c] font-mono text-[10px] select-all border border-[#2c2e3a]">
+                    {getRedirectUri()}
+                  </code>
+                </div>
+
                 {tickTickSuccessMsg && (
-                  <div className="mt-4 p-3 rounded-xl bg-emerald-950/40 border border-emerald-800 text-xs text-emerald-300 flex items-center gap-2">
+                  <div className="mt-3 p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800 text-xs text-emerald-300 flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>{tickTickSuccessMsg}</span>
                   </div>
@@ -1282,11 +1353,11 @@ export const SettingsPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="p-5 rounded-2xl border border-[#262833] bg-[#14151a] shadow-xs space-y-4">
+              <div className="p-4 rounded-lg border border-[#2c2e3a] bg-[#14151a] space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#cc785c]/15 text-[#cc785c] flex items-center justify-center font-bold text-base">
-                      ⚡
+                    <div className="w-8 h-8 rounded-lg bg-[#cc785c]/10 text-[#cc785c] flex items-center justify-center">
+                      <Database className="w-4 h-4" />
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-[#f3f3ee] flex items-center gap-2">

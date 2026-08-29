@@ -1,6 +1,13 @@
 import React, { useState } from 'react'
 import { useMcp } from '../../context/McpContext'
-import { getTickTickAuthUrl, createTickTickTask, clearTickTickToken, getTickTickToken, setTickTickToken } from '../../lib/ticktick'
+import {
+  getTickTickAuthUrl,
+  createTickTickTask,
+  clearTickTickToken,
+  getTickTickToken,
+  setTickTickToken,
+  getRedirectUri,
+} from '../../lib/ticktick'
 
 interface McpConnectCardProps {
   name: string
@@ -189,6 +196,14 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
                       {tokenSaved ? 'تم الحفظ!' : 'حفظ'}
                     </button>
                   </div>
+                </div>
+              )}
+              {isTickTick && (
+                <div className="pt-1 text-[10px] text-[#6b6e79] flex flex-wrap items-center gap-1">
+                  <span>رابط إعادة التوجيه:</span>
+                  <code className="px-1.5 py-0.2 rounded bg-[#0d0e11] text-[#cc785c] font-mono select-all text-[9px] border border-[#2c2e3a]">
+                    {getRedirectUri()}
+                  </code>
                 </div>
               )}
             </div>

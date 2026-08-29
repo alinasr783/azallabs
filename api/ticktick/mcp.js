@@ -1,27 +1,58 @@
-// Vercel serverless proxy for the TickTick MCP server.
-// Browser -> /api/ticktick/mcp -> https://mcp.ticktick.com
+export const config = { runtime: 'edge' }
 
-export default async function handler(req, res) {
+export default async function handler(request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    })
+  }
+
   try {
-    const chunks = []
-    for await (const chunk of req) chunks.push(chunk)
-    const body = Buffer.concat(chunks).toString()
+    const url = new URL(request.url)
+    const rest = url.pathname.replace(/^\/api\/ticktick\/mcp/, '')
+    const targetUrl = `https://mcp.ticktick.com${rest}${url.search}`
 
-    const headers = { ...req.headers }
-    delete headers.host
-    delete headers['content-length']
+    const headers = new Headers()
+    for (const [k, v] of request.headers.entries()) {
+      const lk = k.toLowerCase()
+      if (lk === 'host' || lk === 'content-length') continue
+      headers.set(k, v)
+    }
 
-    const upstream = await fetch('https://mcp.ticktick.com', {
-      method: req.method,
+    const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
+    const body = hasBody ? await request.arrayBuffer() : undefined
+
+    const upstream = await fetch(targetUrl, {
+      method: request.method,
       headers,
-      body: body || undefined,
+      body,
     })
 
-    const text = await upstream.text()
-    res.status(upstream.status)
-    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json')
-    res.end(text)
-  } catch (e) {
-    res.status(500).json({ error: String(e) })
+    const respHeaders = new Headers()
+    for (const [k, v] of upstream.headers.entries()) {
+      const lk = k.toLowerCase()
+      if (lk === 'content-encoding' || lk === 'content-length' || lk === 'transfer-encoding') continue
+      respHeaders.set(k, v)
+    }
+    respHeaders.set('Access-Control-Allow-Origin', '*')
+
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: respHeaders,
+    })
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message || 'TickTick MCP proxy error' }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    })
   }
 }
