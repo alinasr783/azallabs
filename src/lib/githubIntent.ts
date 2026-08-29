@@ -1,7 +1,7 @@
 import type { LlmConfigState } from './llm/types'
 import { executeUnifiedLlmCompletion } from './llm/llmService'
 import { executeMcpTool } from './mcpClient'
-import { fetchGitHubRepos, resolveGitHubContext } from './githubConnector'
+import { fetchGitHubRepos, fetchGitHubRepoCommits, resolveGitHubContext } from './githubConnector'
 
 /**
  * Dedicated, reliable runner for GitHub MCP intents.
@@ -94,13 +94,33 @@ export async function runGitHubIntent(
   let tool = 'search_repositories'
   const params: Record<string, any> = {}
 
+  // Extract branch name if specified (e.g., "لفرع main" or "branch main")
+  const branchMatch = content.match(/(?:ل?فرع|branch)\s+([a-zA-Z0-9_.-]+)/i)
+  if (branchMatch) {
+    params.sha = branchMatch[1]
+  }
+
+  // Extract explicit repo name if specified (e.g., "ريبو اسمه azallabs" or "مستودع azallabs")
+  const repoNameMatch = content.match(/(?:ريبو\s+اسمه|مستودع\s+اسمه|مستودع|ريبو|repo)\s+([a-zA-Z0-9_.-]+)/i)
+  if (repoNameMatch) {
+    const candidateRepo = repoNameMatch[1].trim()
+    if (!['في', 'عندي', 'بتاعي', 'بتعتي', 'main', 'master'].includes(candidateRepo.toLowerCase())) {
+      params.repo = candidateRepo
+    }
+  }
+
   if (lower.includes('مستودع') || lower.includes('مستودعات') || lower.includes('repo') || lower.includes('repos') || lower.includes('مشاريعي')) {
     if (lower.includes('فرع') || lower.includes('فروع') || lower.includes('branch')) {
       tool = 'list_branches'
     } else if (lower.includes('شجرة') || lower.includes('tree') || lower.includes('ملفات المستودع')) {
       tool = 'get_repository_tree'
+    } else if (lower.includes('commit') || lower.includes('كوميت') || lower.includes('إيداع') || lower.includes('ايداعات')) {
+      tool = 'list_commits'
     } else {
       tool = 'search_repositories'
+      if (params.repo) {
+        params.query = params.repo
+      }
     }
   } else if (lower.includes('issue') || lower.includes('مشكلة') || lower.includes('مشاكل') || lower.includes('ايشو') || lower.includes('قضايا')) {
     tool = 'list_issues'
@@ -151,31 +171,69 @@ export async function runGitHubIntent(
   if (repoTools.includes(tool)) {
     try {
       const cleanContent = content.replace(/(github|جيتهاب|جيت هاب|مستودع|المستودع|مشاكل|issues|commits|pulls|branches)/gi, '').trim()
-      const resolved = await resolveGitHubContext(token, cleanContent || undefined)
+      const resolved = await resolveGitHubContext(token, params.repo || cleanContent || undefined)
       if (resolved.owner) params.owner = resolved.owner
       if (resolved.repo) params.repo = resolved.repo
       if (resolved.fullName) params.fullName = resolved.fullName
-      if (resolved.defaultBranch) params.defaultBranch = resolved.defaultBranch
+      if (resolved.defaultBranch && !params.sha) params.defaultBranch = resolved.defaultBranch
     } catch {}
   }
 
   // 3. Execute tool
   let execResult = await exec(tool, params)
 
-  // Direct fallback to fetchGitHubRepos if search_repositories returned empty or failed
-  if (tool === 'search_repositories' && (!execResult.success || !execResult.result)) {
+  // Direct resilient fallback if search_repositories returned empty or failed
+  const isReposListEmpty =
+    (Array.isArray(execResult?.result) && execResult.result.length === 0) ||
+    (Array.isArray(execResult?.result?.items) && execResult.result.items.length === 0) ||
+    !execResult?.result
+
+  if ((tool === 'search_repositories' || tool === 'list_repositories') && (!execResult.success || isReposListEmpty)) {
     try {
-      const directRepos = await fetchGitHubRepos(token)
-      if (directRepos) {
-        execResult = {
-          success: true,
-          result: directRepos,
-          serverName: 'GitHub MCP',
-          toolName: 'search_repositories',
+      const directRepos = await fetchGitHubRepos(token, 'updated', 100)
+      if (Array.isArray(directRepos) && directRepos.length > 0) {
+        if (params.query || params.repo) {
+          const q = (params.query || params.repo).toLowerCase().trim()
+          const filtered = directRepos.filter((r: any) =>
+            r.name?.toLowerCase().includes(q) ||
+            (r.description && r.description.toLowerCase().includes(q))
+          )
+          execResult = {
+            success: true,
+            result: filtered.length > 0 ? filtered : directRepos,
+            serverName: 'GitHub MCP',
+            toolName: 'search_repositories',
+          }
+        } else {
+          execResult = {
+            success: true,
+            result: directRepos,
+            serverName: 'GitHub MCP',
+            toolName: 'list_repositories',
+          }
         }
       }
     } catch (e: any) {
       console.warn('Direct fallback repos fetch error:', e)
+    }
+  }
+
+  // Direct resilient fallback for commits if primary tool returned empty or failed
+  if (tool === 'list_commits' && (!execResult.success || (Array.isArray(execResult?.result?.commits) && execResult.result.commits.length === 0))) {
+    if (params.owner && params.repo) {
+      try {
+        const directCommits = await fetchGitHubRepoCommits(params.owner, params.repo, token, 20, params.sha)
+        if (Array.isArray(directCommits) && directCommits.length > 0) {
+          execResult = {
+            success: true,
+            result: { owner: params.owner, repo: params.repo, commits: directCommits },
+            serverName: 'GitHub MCP',
+            toolName: 'list_commits',
+          }
+        }
+      } catch (e: any) {
+        console.warn('Direct fallback commits fetch error:', e)
+      }
     }
   }
 

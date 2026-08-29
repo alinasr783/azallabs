@@ -89,19 +89,30 @@ export async function testGitHubConnection(tokenToTest?: string): Promise<GitHub
 }
 
 /**
- * Fetch authenticated user's repositories
+ * Fetch authenticated user's repositories (public and private, up to 100)
  */
-export async function fetchGitHubRepos(tokenOverride?: string, sort: string = 'updated', perPage: number = 30) {
+export async function fetchGitHubRepos(tokenOverride?: string, sort: string = 'updated', perPage: number = 100) {
   const token = tokenOverride || getGitHubToken()
   if (!token) throw new Error('GitHub Access Token is required.')
 
-  const res = await fetch(`https://api.github.com/user/repos?sort=${sort}&per_page=${perPage}&affiliation=owner,collaborator`, {
+  let res = await fetch(`https://api.github.com/user/repos?sort=${sort}&per_page=${perPage}&affiliation=owner,collaborator`, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
     },
   })
+
+  if (!res.ok) {
+    // Fallback without affiliation parameter
+    res = await fetch(`https://api.github.com/user/repos?sort=${sort}&per_page=${perPage}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    })
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -160,11 +171,18 @@ export async function fetchGitHubRepoPulls(owner: string, repo: string, tokenOve
 /**
  * Fetch repository commits
  */
-export async function fetchGitHubRepoCommits(owner: string, repo: string, tokenOverride?: string, perPage: number = 20) {
+export async function fetchGitHubRepoCommits(
+  owner: string,
+  repo: string,
+  tokenOverride?: string,
+  perPage: number = 20,
+  sha?: string
+) {
   const token = tokenOverride || getGitHubToken()
   if (!token) throw new Error('GitHub Access Token is required.')
 
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=${perPage}`, {
+  const shaParam = sha ? `&sha=${encodeURIComponent(sha)}` : ''
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=${perPage}${shaParam}`, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
@@ -246,52 +264,113 @@ export async function resolveGitHubContext(
   if (!token) return {}
 
   let repos: any[] = []
+  let user: any = null
+
   try {
-    const data = await fetchGitHubRepos(token, 'updated', 30)
+    const userRes = await testGitHubConnection(token)
+    if (userRes.success && userRes.user) {
+      user = userRes.user
+    }
+  } catch {}
+
+  try {
+    const data = await fetchGitHubRepos(token, 'updated', 100)
     repos = Array.isArray(data) ? data : []
   } catch {
+    if (user) {
+      return { owner: user.login }
+    }
     return {}
   }
 
-  if (!repos.length) return {}
+  const defaultOwner = user?.login || (repos.length > 0 ? repos[0].owner?.login : undefined)
+
+  if (!repos.length) {
+    return defaultOwner ? { owner: defaultOwner } : {}
+  }
 
   // If user provided a specific repo name or owner/repo format
   if (requestedRepoText && requestedRepoText.trim()) {
     const clean = requestedRepoText.trim().toLowerCase()
     
-    // 1. Check for owner/repo format
+    // 1. Check for owner/repo format: "owner/repo"
     if (clean.includes('/')) {
-      const parts = clean.split('/')
-      const o = parts[0].trim()
-      const r = parts[1].trim()
-      const match = repos.find(
-        (rp: any) =>
-          rp.owner?.login?.toLowerCase() === o &&
-          rp.name?.toLowerCase() === r
-      )
-      if (match) {
+      const matchSlash = clean.match(/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_.-]+)/)
+      if (matchSlash) {
+        const o = matchSlash[1].toLowerCase()
+        const r = matchSlash[2].toLowerCase()
+        const match = repos.find(
+          (rp: any) =>
+            rp.owner?.login?.toLowerCase() === o &&
+            rp.name?.toLowerCase() === r
+        )
+        if (match) {
+          return {
+            owner: match.owner?.login,
+            repo: match.name,
+            fullName: match.full_name,
+            defaultBranch: match.default_branch || 'main',
+            allRepos: repos,
+          }
+        }
         return {
-          owner: match.owner?.login,
-          repo: match.name,
-          fullName: match.full_name,
-          defaultBranch: match.default_branch || 'main',
+          owner: matchSlash[1],
+          repo: matchSlash[2],
+          fullName: `${matchSlash[1]}/${matchSlash[2]}`,
+          defaultBranch: 'main',
           allRepos: repos,
         }
       }
     }
 
-    // 2. Search substring match
-    const found = repos.find(
-      (rp: any) =>
-        rp.name?.toLowerCase().includes(clean) ||
-        clean.includes(rp.name?.toLowerCase())
-    )
-    if (found) {
+    // 2. Extract potential English words/tokens from the text (e.g. "azallabs")
+    // Filter out common English command words
+    const words = clean
+      .replace(/[^a-zA-Z0-9_.-]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !['main', 'master', 'commits', 'commit', 'branch', 'repo', 'repos', 'github', 'git', 'pull', 'pulls', 'pr'].includes(w))
+
+    // First try exact name match with extracted words
+    for (const w of words) {
+      const exact = repos.find((rp: any) => rp.name.toLowerCase() === w)
+      if (exact) {
+        return {
+          owner: exact.owner?.login || defaultOwner,
+          repo: exact.name,
+          fullName: exact.full_name,
+          defaultBranch: exact.default_branch || 'main',
+          allRepos: repos,
+        }
+      }
+    }
+
+    // Next, sort repos by name length descending to avoid short names like "ai" or "mo" matching inside other words!
+    const sortedByLength = [...repos].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0))
+    for (const rp of sortedByLength) {
+      const rName = rp.name.toLowerCase()
+      // Only match if the repo name is at least 3 chars or is an exact word boundary in clean
+      if (rName.length >= 3) {
+        const regex = new RegExp(`(^|[^a-zA-Z0-9_-])${rName}([^a-zA-Z0-9_-]|$)`, 'i')
+        if (regex.test(clean)) {
+          return {
+            owner: rp.owner?.login || defaultOwner,
+            repo: rp.name,
+            fullName: rp.full_name,
+            defaultBranch: rp.default_branch || 'main',
+            allRepos: repos,
+          }
+        }
+      }
+    }
+
+    // If an extracted word looks like a repo name even if not found in list (e.g. newly created)
+    if (words.length > 0) {
+      const candidate = words[words.length - 1]
       return {
-        owner: found.owner?.login,
-        repo: found.name,
-        fullName: found.full_name,
-        defaultBranch: found.default_branch || 'main',
+        owner: defaultOwner,
+        repo: candidate,
+        fullName: defaultOwner ? `${defaultOwner}/${candidate}` : candidate,
+        defaultBranch: 'main',
         allRepos: repos,
       }
     }
@@ -300,7 +379,7 @@ export async function resolveGitHubContext(
   // Default to the most recently updated repository
   const target = repos[0]
   return {
-    owner: target.owner?.login,
+    owner: target.owner?.login || defaultOwner,
     repo: target.name,
     fullName: target.full_name,
     defaultBranch: target.default_branch || 'main',

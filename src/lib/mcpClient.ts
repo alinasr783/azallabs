@@ -920,11 +920,17 @@ async function executeGitHubTool(
                 }
               }
             }
-            return {
-              success: true,
-              result: parsedData,
-              serverName: 'GitHub MCP',
-              toolName,
+            // If search_repositories or list_repositories returned empty array from Copilot MCP, fall through to REST fallback to get actual user repos
+            const isEmptyRepos = (toolName === 'search_repositories' || toolName === 'list_repositories') &&
+              (Array.isArray(parsedData) && parsedData.length === 0 || Array.isArray(parsedData?.items) && parsedData.items.length === 0)
+
+            if (!isEmptyRepos) {
+              return {
+                success: true,
+                result: parsedData,
+                serverName: 'GitHub MCP',
+                toolName,
+              }
             }
           }
         }
@@ -940,20 +946,32 @@ async function executeGitHubTool(
 
       if (toolName === 'search_repositories' || toolName === 'list_repositories') {
         const query = effectiveParams.query
-        if (query) {
-          const res = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&per_page=20`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-            },
-          })
-          if (res.ok) {
-            const data = await res.json()
-            return { success: true, result: data.items || data, serverName: 'GitHub MCP', toolName }
+        const allUserRepos = await fetchGitHubRepos(token, 'updated', 100)
+        if (query && typeof query === 'string' && query.trim()) {
+          const q = query.toLowerCase().trim()
+          const matched = allUserRepos.filter((r: any) =>
+            r.name?.toLowerCase().includes(q) ||
+            (r.description && r.description.toLowerCase().includes(q))
+          )
+          if (matched.length > 0) {
+            return { success: true, result: matched, serverName: 'GitHub MCP', toolName }
           }
+          try {
+            const res = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&per_page=20`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/vnd.github+json',
+              },
+            })
+            if (res.ok) {
+              const data = await res.json()
+              if (Array.isArray(data.items) && data.items.length > 0) {
+                return { success: true, result: data.items, serverName: 'GitHub MCP', toolName }
+              }
+            }
+          } catch {}
         }
-        const data = await fetchGitHubRepos(token, 'updated', 30)
-        return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+        return { success: true, result: allUserRepos, serverName: 'GitHub MCP', toolName }
       }
 
       if (toolName === 'list_issues') {
@@ -1014,7 +1032,8 @@ async function executeGitHubTool(
 
       if (toolName === 'list_commits') {
         if (owner && repo) {
-          const data = await fetchGitHubRepoCommits(owner, repo, token, effectiveParams.perPage || 20)
+          const sha = effectiveParams.sha || effectiveParams.ref || effectiveParams.branch
+          const data = await fetchGitHubRepoCommits(owner, repo, token, effectiveParams.perPage || 20, sha)
           return {
             success: true,
             result: { owner, repo, commits: data },
