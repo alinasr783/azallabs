@@ -340,31 +340,33 @@ export async function resolveGitHubContext(
   if (requestedRepoText && requestedRepoText.trim()) {
     const clean = requestedRepoText.trim().toLowerCase()
     
-    // 1. Check for owner/repo format: "owner/repo"
-    if (clean.includes('/')) {
-      const matchSlash = clean.match(/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_.-]+)/)
+    // 1. Check for explicit GitHub URL format
+    const ghUrlMatch = clean.match(/github\.com\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_.-]+)/)
+    if (ghUrlMatch) {
+      const o = ghUrlMatch[1]
+      const r = ghUrlMatch[2]
+      const match = repos.find((rp: any) => rp.owner?.login?.toLowerCase() === o && rp.name?.toLowerCase() === r)
+      return {
+        owner: o,
+        repo: r,
+        fullName: `${o}/${r}`,
+        defaultBranch: match?.default_branch || 'main',
+        allRepos: repos,
+      }
+    }
+
+    // 2. Check for explicit owner/repo format ONLY IF it's a single word without spaces or https
+    if (clean.includes('/') && !clean.includes(' ') && !clean.includes('http')) {
+      const matchSlash = clean.match(/^([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_.-]+)$/)
       if (matchSlash) {
-        const o = matchSlash[1].toLowerCase()
-        const r = matchSlash[2].toLowerCase()
-        const match = repos.find(
-          (rp: any) =>
-            rp.owner?.login?.toLowerCase() === o &&
-            rp.name?.toLowerCase() === r
-        )
-        if (match) {
-          return {
-            owner: match.owner?.login,
-            repo: match.name,
-            fullName: match.full_name,
-            defaultBranch: match.default_branch || 'main',
-            allRepos: repos,
-          }
-        }
+        const o = matchSlash[1]
+        const r = matchSlash[2]
+        const match = repos.find((rp: any) => rp.owner?.login?.toLowerCase() === o && rp.name?.toLowerCase() === r)
         return {
-          owner: matchSlash[1],
-          repo: matchSlash[2],
-          fullName: `${matchSlash[1]}/${matchSlash[2]}`,
-          defaultBranch: 'main',
+          owner: o,
+          repo: r,
+          fullName: `${o}/${r}`,
+          defaultBranch: match?.default_branch || 'main',
           allRepos: repos,
         }
       }
