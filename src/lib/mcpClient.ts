@@ -23,6 +23,9 @@ import {
   getVercelToken,
   fetchVercelProjects,
   fetchVercelDeployments,
+  fetchVercelDeploymentEvents,
+  fetchVercelRuntimeLogs,
+  resolveVercelContext,
 } from './vercelConnector'
 
 export interface McpExecutionResult {
@@ -519,6 +522,35 @@ async function executeVercelTool(
   serverUrl: string = 'https://mcp.vercel.com'
 ): Promise<McpExecutionResult> {
   const token = authToken || getVercelToken()
+  const effectiveParams: Record<string, any> = { ...parameters }
+
+  // Auto-resolve missing projectId/teamId/idOrUrl for tools that require them
+  const requiresContext = [
+    'get_runtime_logs',
+    'get_runtime_errors',
+    'get_deployment_build_logs',
+    'list_deployments',
+    'get_deployment',
+    'get_project',
+    'get_web_analytics',
+  ].includes(toolName)
+
+  let resolvedContext: any = null
+  if (token && requiresContext && (!effectiveParams.projectId || !effectiveParams.idOrUrl)) {
+    try {
+      resolvedContext = await resolveVercelContext(token, effectiveParams.projectName || effectiveParams.project)
+      if (resolvedContext.projectId && !effectiveParams.projectId) {
+        effectiveParams.projectId = resolvedContext.projectId
+      }
+      if (resolvedContext.teamId && !effectiveParams.teamId) {
+        effectiveParams.teamId = resolvedContext.teamId
+      }
+      if (resolvedContext.deploymentId) {
+        if (!effectiveParams.deploymentId) effectiveParams.deploymentId = resolvedContext.deploymentId
+        if (!effectiveParams.idOrUrl) effectiveParams.idOrUrl = resolvedContext.deploymentId
+      }
+    } catch {}
+  }
 
   // 1. Primary: Direct JSON-RPC call to https://mcp.vercel.com (tools/call)
   if (token) {
@@ -539,7 +571,7 @@ async function executeVercelTool(
           method: 'tools/call',
           params: {
             name: toolName,
-            arguments: parameters,
+            arguments: effectiveParams,
           },
           id: Date.now(),
         }),
@@ -633,6 +665,78 @@ async function executeVercelTool(
         if (res.ok) {
           const data = await res.json()
           return { success: true, result: data, serverName: 'Vercel MCP', toolName }
+        }
+      }
+
+      if (toolName === 'get_runtime_logs') {
+        const projectId = effectiveParams.projectId || resolvedContext?.projectId
+        const deploymentId = effectiveParams.deploymentId || effectiveParams.idOrUrl || resolvedContext?.deploymentId
+        const teamId = effectiveParams.teamId || resolvedContext?.teamId
+        if (projectId && deploymentId) {
+          const data = await fetchVercelRuntimeLogs(projectId, deploymentId, teamId, token)
+          return {
+            success: true,
+            result: {
+              projectName: resolvedContext?.projectName || projectId,
+              projectId,
+              deploymentId,
+              events: Array.isArray(data) ? data : data?.events || [data],
+            },
+            serverName: 'Vercel MCP',
+            toolName,
+          }
+        }
+      }
+
+      if (toolName === 'get_deployment_build_logs') {
+        const idOrUrl = effectiveParams.idOrUrl || effectiveParams.deploymentId || resolvedContext?.deploymentId
+        const teamId = effectiveParams.teamId || resolvedContext?.teamId
+        if (idOrUrl) {
+          const data = await fetchVercelDeploymentEvents(idOrUrl, teamId, token)
+          return {
+            success: true,
+            result: {
+              projectName: resolvedContext?.projectName,
+              deploymentId: idOrUrl,
+              buildLogs: Array.isArray(data) ? data : data?.events || [data],
+            },
+            serverName: 'Vercel MCP',
+            toolName,
+          }
+        }
+      }
+
+      if (toolName === 'get_runtime_errors') {
+        const projectId = effectiveParams.projectId || resolvedContext?.projectId
+        const deploymentId = effectiveParams.deploymentId || effectiveParams.idOrUrl || resolvedContext?.deploymentId
+        const teamId = effectiveParams.teamId || resolvedContext?.teamId
+        if (projectId && deploymentId) {
+          const raw = await fetchVercelRuntimeLogs(projectId, deploymentId, teamId, token)
+          const allEvents = Array.isArray(raw) ? raw : raw?.events || []
+          const errors = allEvents.filter((ev: any) => {
+            const txt = (ev.payload?.text || ev.text || ev.message || '').toLowerCase()
+            const type = (ev.type || '').toLowerCase()
+            const status = ev.statusCode || ev.payload?.statusCode
+            return (
+              type.includes('error') ||
+              txt.includes('error') ||
+              txt.includes('exception') ||
+              txt.includes('fatal') ||
+              (status && status >= 400)
+            )
+          })
+          return {
+            success: true,
+            result: {
+              projectName: resolvedContext?.projectName || projectId,
+              projectId,
+              deploymentId,
+              totalErrors: errors.length,
+              errors: errors.slice(0, 30),
+            },
+            serverName: 'Vercel MCP',
+            toolName,
+          }
         }
       }
 

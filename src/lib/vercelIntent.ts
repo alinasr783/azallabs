@@ -1,7 +1,7 @@
 import type { LlmConfigState } from './llm/types'
 import { executeUnifiedLlmCompletion } from './llm/llmService'
 import { executeMcpTool } from './mcpClient'
-import { fetchVercelProjects } from './vercelConnector'
+import { fetchVercelProjects, resolveVercelContext } from './vercelConnector'
 
 /**
  * Reliable, direct handler for Vercel MCP intents.
@@ -106,6 +106,25 @@ export async function runVercelIntent(
   } else {
     // Default to listing projects
     tool = 'list_projects'
+  }
+
+  // Auto-resolve project & deployment context for tools that require them
+  if (['get_runtime_logs', 'get_runtime_errors', 'get_deployment_build_logs', 'list_deployments', 'get_deployment'].includes(tool)) {
+    try {
+      const cleanContent = content.replace(/(vercel|فيرسل|فرسل|سجلات|سجل|أخطاء|خطأ|البناء|التشغيل|نشر|deploy|logs|build|runtime|errors)/gi, '').trim()
+      const resolved = await resolveVercelContext(token, cleanContent || undefined)
+      if (resolved.projectId) {
+        params.projectId = resolved.projectId
+        params.projectName = resolved.projectName
+      }
+      if (resolved.teamId) {
+        params.teamId = resolved.teamId
+      }
+      if (resolved.deploymentId) {
+        params.deploymentId = resolved.deploymentId
+        params.idOrUrl = resolved.deploymentId
+      }
+    } catch {}
   }
 
   // 3. Execute the tool
@@ -247,7 +266,108 @@ function formatVercelResult(tool: string, params: Record<string, any>, result: a
     )
   }
 
-  // 4. Domains
+  // 4. Runtime Logs
+  if (tool === 'get_runtime_logs') {
+    const rawEvents = Array.isArray(result?.events)
+      ? result.events
+      : Array.isArray(result)
+      ? result
+      : []
+
+    const projName = result?.projectName || params.projectName || 'المشروع'
+    const depId = result?.deploymentId || params.deploymentId || ''
+
+    if (!rawEvents.length) {
+      return (
+        `### 📋 سجلات التشغيل الحية (Runtime Logs)\n\n` +
+        `المشروع: **${projName}** ${depId ? `(معرف النشر: \`${depId}\`)` : ''}\n\n` +
+        `🟢 **لا توجد أي أخطاء أو أحداث غير اعتيادية مسجلة حديثاً.** الدوال وتطبيقات Vercel تعمل بشكل سليم ومستقر.`
+      )
+    }
+
+    const logLines = rawEvents.slice(-25).map((ev: any) => {
+      const time = ev.created ? new Date(ev.created).toLocaleTimeString('ar-EG') : ev.time || ''
+      const text = (ev.payload?.text || ev.text || ev.message || JSON.stringify(ev)).trim()
+      const type = (ev.type || ev.level || 'info').toUpperCase()
+      const badge = type.includes('ERR') ? '🔴' : type.includes('WARN') ? '🟡' : '⚪'
+      return `${badge} [${time}] [${type}] ${text}`
+    })
+
+    return (
+      `### 📋 أحدث سجلات التشغيل (Runtime Logs)\n\n` +
+      `المشروع: **${projName}** ${depId ? `(معرف النشر: \`${depId}\`)` : ''} — عدد السجلات المسترجعة: **${rawEvents.length}**\n\n` +
+      `\`\`\`log\n` +
+      logLines.join('\n') +
+      `\n\`\`\`\n\n` +
+      `💡 يتم استرجاع السجلات الحية مباشرة من بيئة تشغيل الدوال (Vercel Functions).`
+    )
+  }
+
+  // 5. Deployment Build Logs
+  if (tool === 'get_deployment_build_logs') {
+    const rawLogs = Array.isArray(result?.buildLogs)
+      ? result.buildLogs
+      : Array.isArray(result?.events)
+      ? result.events
+      : Array.isArray(result)
+      ? result
+      : []
+
+    const projName = result?.projectName || params.projectName || 'المشروع'
+    const depId = result?.deploymentId || params.idOrUrl || ''
+
+    if (!rawLogs.length) {
+      return `### 🏗️ سجلات البناء (Build Logs)\n\nالمشروع: **${projName}**\n\nلا توجد سجلات بناء مسجلة لعملية النشر هذه حالياً.`
+    }
+
+    const lines = rawLogs.slice(-30).map((l: any) => {
+      const time = l.created ? new Date(l.created).toLocaleTimeString('ar-EG') : ''
+      const text = (l.payload?.text || l.text || l.message || '').trim()
+      return `[${time}] ${text}`
+    })
+
+    return (
+      `### 🏗️ سجلات البناء (Build Logs)\n\n` +
+      `المشروع: **${projName}** ${depId ? `(\`${depId}\`)` : ''}\n\n` +
+      `\`\`\`bash\n` +
+      lines.join('\n') +
+      `\n\`\`\``
+    )
+  }
+
+  // 6. Runtime Errors
+  if (tool === 'get_runtime_errors') {
+    const rawErrors = Array.isArray(result?.errors)
+      ? result.errors
+      : Array.isArray(result)
+      ? result
+      : []
+
+    const projName = result?.projectName || params.projectName || 'المشروع'
+
+    if (!rawErrors.length) {
+      return (
+        `### 🛡️ فحص أخطاء التشغيل (Runtime Errors)\n\n` +
+        `المشروع: **${projName}**\n\n` +
+        `🎉 **ممتاز! لا توجد أي أخطاء تشغيلية (Runtime Errors) مسجلة في بيئة الإنتاج.** النظام يعمل بكفاءة 100%.`
+      )
+    }
+
+    const rows = rawErrors.map((err: any, idx: number) => {
+      const text = (err.payload?.text || err.text || err.message || JSON.stringify(err)).slice(0, 120)
+      const time = err.created ? new Date(err.created).toLocaleString('ar-EG') : 'حديثاً'
+      return `| ${idx + 1} | 🔴 ${text} | ${time} |`
+    })
+
+    return (
+      `### ⚠️ أخطاء التشغيل المرصودة (إجمالي ${rawErrors.length})\n\n` +
+      `المشروع: **${projName}**\n\n` +
+      `| # | رسالة الخطأ / التفاصيل | الوقت |\n| :--- | :--- | :--- |\n` +
+      rows.join('\n')
+    )
+  }
+
+  // 7. Domains
   if (tool === 'check_domain_availability_and_price') {
     const domains = Array.isArray(result?.domains) ? result.domains : []
     if (!domains.length) {
@@ -266,7 +386,7 @@ function formatVercelResult(tool: string, params: Record<string, any>, result: a
     )
   }
 
-  // 5. Documentation
+  // 8. Documentation
   if (tool === 'search_vercel_documentation') {
     return (
       `### 📚 نتائج استعلام توثيق Vercel\n\n` +
@@ -276,6 +396,6 @@ function formatVercelResult(tool: string, params: Record<string, any>, result: a
     )
   }
 
-  // 6. Generic Fallback
+  // 9. Generic Fallback
   return `✅ **تم تنفيذ الأداة \`${tool}\` على خادم Vercel MCP بنجاح.**\n\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``
 }
