@@ -11,11 +11,8 @@ import {
   Loader2,
   Check,
   Link2,
-  Cpu,
-  Brain,
   Download,
   CheckCircle,
-  Sliders,
   Play,
   RotateCcw,
   Copy,
@@ -453,49 +450,45 @@ export const SettingsPage: React.FC = () => {
         <div className="flex items-center gap-1 bg-[#181920] border border-[#262833] p-1 rounded-2xl overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none] w-full">
           <button
             onClick={() => handleTabChange('llm')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'llm'
-                ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
-                : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
+                ? 'bg-[#1a1b22] text-[#cc785c] font-bold border border-[#cc785c]/40'
+                : 'text-[#6b6e79] hover:text-[#f3f3ee] hover:bg-[#1a1b22]'
             }`}
           >
-            <Cpu className="w-3.5 h-3.5" />
             <span>النماذج (LLM)</span>
           </button>
 
           <button
             onClick={() => handleTabChange('system-prompt')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'system-prompt'
-                ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
-                : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
+                ? 'bg-[#1a1b22] text-[#cc785c] font-bold border border-[#cc785c]/40'
+                : 'text-[#6b6e79] hover:text-[#f3f3ee] hover:bg-[#1a1b22]'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5" />
             <span>التعليمات التوجيهية</span>
           </button>
 
           <button
             onClick={() => handleTabChange('memory')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'memory'
-                ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
-                : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
+                ? 'bg-[#1a1b22] text-[#cc785c] font-bold border border-[#cc785c]/40'
+                : 'text-[#6b6e79] hover:text-[#f3f3ee] hover:bg-[#1a1b22]'
             }`}
           >
-            <Brain className="w-3.5 h-3.5" />
             <span>الذاكرة الدائمة</span>
           </button>
 
           <button
             onClick={() => handleTabChange('mcp')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'mcp'
-                ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
-                : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
+                ? 'bg-[#1a1b22] text-[#cc785c] font-bold border border-[#cc785c]/40'
+                : 'text-[#6b6e79] hover:text-[#f3f3ee] hover:bg-[#1a1b22]'
             }`}
           >
-            <Link2 className="w-3.5 h-3.5" />
             <span>خوادم الربط (MCP)</span>
           </button>
         </div>
@@ -924,18 +917,16 @@ export const SettingsPage: React.FC = () => {
           <section className="space-y-6">
             {/* Header & Actions */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-base font-semibold text-[#f3f3ee] flex items-center gap-2">
-                    <span>التعليمات التوجيهية للنظام</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-[#14151a] text-[#cc785c] border border-[#2c2e3a]">
-                      وضع متقدم
-                    </span>
-                  </h2>
-                    <p className="text-xs text-[#9da0a8] mt-0.5">
-                      تحديد القواعد السلوكية، وإرشادات الدقة ومكافحة الهلوسة، وتعليمات استدعاء الأدوات البرمجية.
-                    </p>
-                  </div>
-                </div>
+              <div>
+                <h2 className="text-base font-semibold text-[#f3f3ee] flex items-center gap-2">
+                  <span>التعليمات التوجيهية للنظام</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-[#14151a] text-[#cc785c] border border-[#2c2e3a]">
+                    وضع متقدم
+                  </span>
+                </h2>
+                <p className="text-xs text-[#9da0a8] mt-0.5">
+                  تحديد القواعد السلوكية، وإرشادات الدقة ومكافحة الهلوسة، وتعليمات استدعاء الأدوات البرمجية.
+                </p>
               </div>
 
               <div className="flex items-center gap-2 self-end sm:self-auto">

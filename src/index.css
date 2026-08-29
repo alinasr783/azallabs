@@ -49,19 +49,59 @@
     line-height: 1.6;
   }
 
-  /* Universal Font Stack: IBM Plex Sans Arabic (UI) + JetBrains Mono (code/terminal) */
+  /* Universal Font Stack: 'Comic Relief' for English/Latin characters, 'Amiri' for Arabic characters */
   *, *::before, *::after,
   html, body, input, button, select, textarea, optgroup,
+  code, pre, kbd, samp,
   span, p, h1, h2, h3, h4, h5, h6, a, div, li, td, th {
-    font-family: 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif !important;
+    font-family: 'Comic Relief', 'Amiri', system-ui, serif !important;
   }
 
-  code, pre, kbd, samp, .font-mono {
-    font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace !important;
-    direction: ltr;
-    text-align: left;
-    unicode-bidi: plaintext;
+  .font-mono, .font-sans, .font-serif {
+    font-family: 'Comic Relief', 'Amiri', system-ui, serif !important;
   }
+
+  :lang(en), [lang="en"], .en {
+    font-family: 'Comic Relief', system-ui !important;
+  }
+}
+
+/* Amiri Font Styles */
+.amiri-regular {
+  font-family: "Amiri", serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.amiri-bold {
+  font-family: "Amiri", serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.amiri-regular-italic {
+  font-family: "Amiri", serif;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.amiri-bold-italic {
+  font-family: "Amiri", serif;
+  font-weight: 700;
+  font-style: italic;
+}
+
+/* Comic Relief Font Styles (for English text) */
+.comic-relief-regular {
+  font-family: "Comic Relief", system-ui;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.comic-relief-bold {
+  font-family: "Comic Relief", system-ui;
+  font-weight: 700;
+  font-style: normal;
 }
 
 /* ═══════════════════════════════════════════════════════════════
