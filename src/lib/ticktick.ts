@@ -39,6 +39,18 @@ async function parseTickTickJson(response: Response, label: string): Promise<any
   const trimmed = raw.trimStart()
 
   if (trimmed.startsWith('<!') || trimmed.toLowerCase().startsWith('<!doctype')) {
+    // If the HTML is our own SPA (index.html), it means the /api/ticktick proxy
+    // is absent — the request never left the app. TickTick's API has no browser
+    // CORS support, so it MUST be reached through the dev/preview proxy.
+    const isOurSpaFallback =
+      /<div id="root"/.test(trimmed) ||
+      /<script[^>]+src="\/assets\//.test(trimmed) ||
+      trimmed.includes('crossorigin')
+    if (isOurSpaFallback) {
+      throw new Error(
+        `خادم الـ API proxy غير مُفعّل: وصل طلب TickTick لصفحة التطبيق نفسه (index.html) بدل خادم TickTick. السبب: أنت تشغّل نسخة مبنية (dist) بدون خادم proxy. الحل: شغّل التطبيق عبر "npm run dev" (أو "npm run preview") — ولا تفتح ملف index.html مباشرة ولا تستخدم خادم static عادي.`
+      )
+    }
     if (response.status === 401 || response.status === 403) {
       clearTickTickToken()
       throw new Error(
@@ -46,7 +58,7 @@ async function parseTickTickJson(response: Response, label: string): Promise<any
       )
     }
     throw new Error(
-      `رجّع خادم TickTick صفحة HTML بدل JSON عند "${label}". الأسباب المحتملة: (1) توكن TickTick غير صالح/منتهٍ — أعد ربطه من الإعدادات، أو (2) خادم الـ API proxy غير مُفعّل — شغّل التطبيق عبر "vite dev" (أو أضف preview.proxy للنسخة المبنية).`
+      `رجّع خادم TickTick صفحة HTML بدل JSON عند "${label}". السبب: توكن TickTick غير صالح/منتهٍ — أعد ربطه من صفحة الإعدادات (تبويب خوادم الربط).`
     )
   }
 
