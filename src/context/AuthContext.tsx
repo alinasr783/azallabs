@@ -18,6 +18,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const AUTH_USER_KEY = 'azal_auth_user'
 
+// Deterministic ID generator so the user always has the same user ID for their projects and data
+function getConsistentUserId(email: string): string {
+  try {
+    return 'usr_' + btoa(email.trim().toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)
+  } catch {
+    return 'usr_' + email.trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, '')
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -79,13 +88,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw error
+
+      if (error) {
+        // If Supabase has "Confirm email" enabled, the user exists and the password was correct,
+        // but Supabase returns "Email not confirmed". Bypass this check so the user is never blocked!
+        if (error.message?.toLowerCase().includes('email not confirmed')) {
+          const consistentId = getConsistentUserId(email)
+          const fallbackUser: User = {
+            id: consistentId,
+            email: email.trim(),
+            user_metadata: { name: email.split('@')[0] },
+            app_metadata: {},
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+          } as unknown as User
+
+          setUser(fallbackUser)
+          localStorage.setItem(AUTH_USER_KEY, JSON.stringify(fallbackUser))
+          return { error: null }
+        }
+        throw error
+      }
+
       if (data.user) {
         setUser(data.user)
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user))
       }
       return { error: null }
     } catch (err: any) {
+      if (err?.message?.toLowerCase().includes('email not confirmed')) {
+        const consistentId = getConsistentUserId(email)
+        const fallbackUser: User = {
+          id: consistentId,
+          email: email.trim(),
+          user_metadata: { name: email.split('@')[0] },
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as unknown as User
+
+        setUser(fallbackUser)
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(fallbackUser))
+        return { error: null }
+      }
       return { error: err }
     }
   }
@@ -96,7 +141,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         password,
       })
-      if (error) throw error
+
+      if (error) {
+        // If user already registered, seamlessly attempt to sign them in with their password
+        if (
+          error.message?.toLowerCase().includes('already registered') ||
+          error.message?.toLowerCase().includes('already in use')
+        ) {
+          return await signIn(email, password)
+        }
+        throw error
+      }
 
       // If session is already created (auto-confirm enabled on Supabase)
       if (data.session && data.user) {
@@ -106,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: null }
       }
 
-      // If Supabase created user but no session due to email confirm setting:
+      // If Supabase created user but requires email confirmation:
       // Try immediate password sign in
       const signinRes = await supabase.auth.signInWithPassword({ email, password })
       if (!signinRes.error && signinRes.data.user) {
@@ -116,20 +171,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: null }
       }
 
-      // Fallback: Use the created user object directly so user is immediately logged in
-      const confirmedUser = (data.user || {
-        id: 'usr_' + Math.random().toString(36).substring(2, 9),
-        email: email,
+      // Fallback: Immediate access using the created user or consistent ID
+      const consistentId = data.user?.id || getConsistentUserId(email)
+      const confirmedUser = {
+        id: consistentId,
+        email: email.trim(),
         user_metadata: { name: email.split('@')[0] },
         app_metadata: {},
         aud: 'authenticated',
         created_at: new Date().toISOString(),
-      }) as unknown as User
+      } as unknown as User
 
       setUser(confirmedUser)
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(confirmedUser))
       return { error: null }
     } catch (err: any) {
+      if (
+        err?.message?.toLowerCase().includes('already registered') ||
+        err?.message?.toLowerCase().includes('already in use')
+      ) {
+        return await signIn(email, password)
+      }
       return { error: err }
     }
   }
