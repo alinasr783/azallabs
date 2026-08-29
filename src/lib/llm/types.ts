@@ -29,7 +29,7 @@ export interface StreamLlmOptions {
 }
 
 export const DEFAULT_LLM_CONFIG: LlmConfigState = {
-  activeProvider: 'gemini',
+  activeProvider: 'custom',
   gemini: {
     apiKey: '',
     model: 'gemini-3.5-flash-lite',
@@ -44,7 +44,7 @@ export const DEFAULT_LLM_CONFIG: LlmConfigState = {
     endpoint: 'https://api.deepseek.com/chat/completions',
   },
   custom: {
-    apiKey: '',
+    apiKey: import.meta.env.VITE_GROQ_API_KEY || '',
     model: 'llama-3.3-70b-versatile',
     endpoint: 'https://api.groq.com/openai/v1/chat/completions',
   },
