@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { CheckCircle2, AlertCircle, Loader2, Wrench } from 'lucide-react'
 import { createTickTickTask, fetchTickTickProjects, fetchTasksByProjectName, getTickTickToken } from '../../lib/ticktick'
 import { executeMcpTool } from '../../lib/mcpClient'
 import { useMcp } from '../../context/McpContext'
@@ -58,29 +57,23 @@ export const McpToolExecutionCard: React.FC<McpToolExecutionCardProps> = ({ serv
               setStatus('success')
             }
           } else {
-            await new Promise((r) => setTimeout(r, 400))
+            const dynamicRes = await executeMcpTool(server, tool, params)
             if (isMounted) {
-              setResult({ message: 'تم تنفيذ أداة TickTick بنجاح' })
+              setResult(dynamicRes.result || dynamicRes)
               setStatus('success')
             }
           }
         } else {
-          // Real execution via mcpClient for 800 Academy and all custom servers
-          const execRes = await executeMcpTool(server, tool, params, servers)
+          const dynamicRes = await executeMcpTool(server, tool, params)
           if (isMounted) {
-            if (execRes.success) {
-              setResult(execRes.result)
-              setStatus('success')
-            } else {
-              setErrorMessage(execRes.errorMessage || 'فشل تنفيذ أداة الـ MCP.')
-              setStatus('error')
-            }
+            setResult(dynamicRes.result || dynamicRes)
+            setStatus('success')
           }
         }
       } catch (err: any) {
         if (isMounted) {
+          setErrorMessage(err.message || 'حدث خطأ غير متوقع أثناء استدعاء الأداة عبر خادم MCP.')
           setStatus('error')
-          setErrorMessage(err.message || 'حدث خطأ أثناء تنفيذ أداة الـ MCP.')
         }
       }
     }
@@ -90,23 +83,27 @@ export const McpToolExecutionCard: React.FC<McpToolExecutionCardProps> = ({ serv
     return () => {
       isMounted = false
     }
-  }, [server, tool, JSON.stringify(params)])
+  }, [server, tool, params, servers])
 
   const getToolDisplayName = () => {
     switch (tool) {
       case 'ticktick_create_task':
         return 'إنشاء مهمة في (TickTick)'
       case 'ticktick_get_projects':
-        return 'استعراض مشاريع (TickTick)'
+        return 'استعراض المشاريع والقوائم'
       case 'ticktick_get_tasks':
-        return 'جلب المهام من (TickTick)'
+        return 'جلب قائمة المهام الفعلية'
+      case 'read_blogs':
+      case 'get_blogs':
+        return 'استرجاع مقالات المدونة'
+      case 'add_blog':
+      case 'create_blog':
+        return 'نشر مقال جديد في المنصة'
+      case 'read_exams':
+      case 'get_exams':
+        return 'استعراض الامتحانات المتاحة'
       case 'get_subjects':
-        return 'استعراض المواد والمسارات الدراسية'
-      case 'get_packages':
-        return 'جلب باقات واشتراكات الطلاب'
-      case 'get_courses':
-        return 'استعراض الدورات والمساقات'
-      case 'search_curriculum':
+      case 'list_subjects_full':
         return 'فحص المناهج وبنوك الأسئلة'
       default:
         return tool
@@ -114,57 +111,58 @@ export const McpToolExecutionCard: React.FC<McpToolExecutionCardProps> = ({ serv
   }
 
   return (
-    <div className="my-2.5 p-3.5 rounded-xl border border-[#262833] bg-[#14151a] shadow-xs text-right max-w-xl">
+    <div className="my-2 p-3 rounded-lg border border-[#2c2e3a] bg-[#14151a] text-right max-w-xl">
+      {/* Header */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <Wrench className="w-4 h-4 text-[#cc785c]" />
+          <span className="text-[#cc785c] text-xs">●</span>
           <span className="text-xs font-semibold text-[#f3f3ee]">
             {getToolDisplayName()}
           </span>
-          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#1d1e26] border border-[#262833] text-[#cc785c] font-bold">
-            ({server}/{tool})
+          <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#0d0e11] border border-[#2c2e3a] text-[#6b6e79] font-mono">
+            {server}/{tool}
           </span>
         </div>
 
         {status === 'running' && (
-          <span className="text-[11px] text-[#cc785c] flex items-center gap-1 font-mono">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            جاري التنفيذ...
+          <span className="text-[11px] text-[#cc785c] flex items-center gap-1">
+            <span className="braille-spinner" />
+            <span>جاري التنفيذ...</span>
           </span>
         )}
         {status === 'success' && (
-          <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 font-mono">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            تم بنجاح
+          <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+            <span>✔</span>
+            <span>تم بنجاح</span>
           </span>
         )}
         {status === 'error' && (
-          <span className="text-[11px] text-red-400 font-medium flex items-center gap-1 font-mono">
-            <AlertCircle className="w-3.5 h-3.5" />
-            فشل التنفيذ
+          <span className="text-[11px] text-red-400 font-medium flex items-center gap-1">
+            <span>✖</span>
+            <span>فشل التنفيذ</span>
           </span>
         )}
       </div>
 
       {/* Tool Parameters */}
       {params && Object.keys(params).length > 0 && (
-        <div className="text-xs text-[#9da0a8] mb-2 bg-[#0d0e11] p-2.5 rounded-lg border border-[#22242c] space-y-1 font-mono">
+        <div className="text-xs text-[#9da0a8] mb-2 bg-[#0d0e11] p-2 rounded border border-[#2c2e3a] space-y-0.5 font-mono">
           {params.title && (
             <div>
-              <span className="font-medium text-[#f3f3ee]">عنوان المهمة: </span>
-              <span>{params.title}</span>
+              <span className="text-[#6b6e79]">العنوان: </span>
+              <span className="text-[#f3f3ee]">{params.title}</span>
             </div>
           )}
           {(params.projectName || params.project) && (
             <div>
-              <span className="font-medium text-[#cc785c]">المشروع: </span>
-              <span className="font-semibold text-[#f3f3ee]">{params.projectName || params.project}</span>
+              <span className="text-[#cc785c]">المشروع: </span>
+              <span className="text-[#f3f3ee]">{params.projectName || params.project}</span>
             </div>
           )}
           {params.content && (
             <div>
-              <span className="font-medium text-[#f3f3ee]">التفاصيل: </span>
-              <span>{params.content}</span>
+              <span className="text-[#6b6e79]">التفاصيل: </span>
+              <span className="text-[#f3f3ee]">{params.content}</span>
             </div>
           )}
         </div>
@@ -172,12 +170,12 @@ export const McpToolExecutionCard: React.FC<McpToolExecutionCardProps> = ({ serv
 
       {/* Result feedback */}
       {status === 'success' && result && (
-        <div className="text-xs text-emerald-300 font-medium bg-emerald-950/20 border border-emerald-900/40 p-2.5 rounded-lg">
+        <div className="text-xs text-emerald-300 bg-emerald-950/20 border border-emerald-900/40 p-2 rounded">
           {tool === 'ticktick_create_task' && (
             <span>
               تم إنشاء المهمة بنجاح
               {(params.projectName || params.project) ? ` داخل مشروع "${params.projectName || params.project}" ` : ' '}
-              في حسابك الفعلي على (TickTick)!
+              في حسابك على (TickTick).
             </span>
           )}
           {tool === 'ticktick_get_projects' && Array.isArray(result) && (
@@ -186,20 +184,18 @@ export const McpToolExecutionCard: React.FC<McpToolExecutionCardProps> = ({ serv
           {tool === 'ticktick_get_tasks' && result && (
             <span>
               {result.tasks && result.tasks.length > 0
-                ? `تم استرجاع ${result.tasks.length} مهام فعلية من مشروع "${result.project?.name || params.projectName}"`
-                : `لا توجد أي مهام مسجلة حالياً داخل مشروع "${result.project?.name || params.projectName || 'المحدد'}".`}
+                ? `تم استرجاع ${result.tasks.length} مهام من مشروع "${result.project?.name || params.projectName}"`
+                : `لا توجد مهام مسجلة حالياً داخل مشروع "${result.project?.name || params.projectName || 'المحدد'}".`}
             </span>
           )}
           {(tool === 'get_subjects' || tool === 'list_subjects_full') && result.subjects && (
-            <span>تم بنجاح جلب {result.subjects.length} مواد دراسية معتمدة في منصة 800 Academy (اختبارات EST و SAT).</span>
+            <span>تم جلب {result.subjects.length} مواد دراسية معتمدة في منصة 800 Academy.</span>
           )}
           {(tool === 'get_packages' || tool === 'list_offers') && (result.offers || result.packages) && (
-            <span>
-              تم بنجاح جلب عروض وباقات المواد المعتمدة في 800 Academy ({result.offers?.length || result.packages?.length} عروض بالجنيه المصري).
-            </span>
+            <span>تم جلب عروض وباقات المواد المعتمدة ({result.offers?.length || result.packages?.length} باقة).</span>
           )}
           {tool === 'get_courses' && result.courses && (
-            <span>تم استرجاع {result.courses.length} مسارات ودورات مسجلة بنجاح.</span>
+            <span>تم استرجاع {result.courses.length} دورة مسجلة بنجاح.</span>
           )}
           {tool !== 'ticktick_create_task' &&
             tool !== 'ticktick_get_projects' &&
@@ -215,7 +211,7 @@ export const McpToolExecutionCard: React.FC<McpToolExecutionCardProps> = ({ serv
       )}
 
       {status === 'error' && (
-        <div className="text-xs text-red-400 bg-red-950/20 border border-red-900/40 p-2.5 rounded-lg">
+        <div className="text-xs text-red-400 bg-red-950/20 border border-red-900/40 p-2 rounded">
           {errorMessage}
         </div>
       )}
