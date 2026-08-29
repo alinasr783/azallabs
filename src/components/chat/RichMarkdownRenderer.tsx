@@ -128,12 +128,19 @@ export const RichMarkdownRenderer: React.FC<RichMarkdownRendererProps> = ({ cont
     if (tableRows.length > 0) {
       const [header, ...body] = tableRows
       elements.push(
-        <div key={key} className="overflow-x-auto my-3 rounded-lg border border-[#2c2e3a] bg-[#14151a]">
-          <table className="w-full text-xs text-right border-collapse">
+        <div
+          key={key}
+          className="w-full my-3.5 overflow-x-auto rounded-lg border border-[#2c2e3a] bg-[#14151a] shadow-inner"
+          dir="rtl"
+        >
+          <table className="min-w-max w-full text-xs text-right border-collapse select-text">
             <thead>
               <tr className="bg-[#1a1b22] border-b border-[#2c2e3a]">
                 {header.map((col, idx) => (
-                  <th key={idx} className="p-2.5 font-semibold text-[#cc785c] tracking-wide whitespace-nowrap">
+                  <th
+                    key={idx}
+                    className="px-4 py-2.5 font-semibold text-[#cc785c] tracking-wide whitespace-nowrap"
+                  >
                     {renderInline(col.trim())}
                   </th>
                 ))}
@@ -143,11 +150,24 @@ export const RichMarkdownRenderer: React.FC<RichMarkdownRendererProps> = ({ cont
               {body.length > 0 ? (
                 body.map((row, rIdx) => (
                   <tr key={rIdx} className="hover:bg-[#1a1b22]/50 transition-colors">
-                    {row.map((cell, cIdx) => (
-                      <td key={cIdx} className="p-2.5 text-[#f3f3ee] leading-relaxed">
-                        {renderInline(cell.trim())}
-                      </td>
-                    ))}
+                    {row.map((cell, cIdx) => {
+                      const trimmedCell = cell.trim()
+                      const isId = /^[0-9a-f]{20,32}$/i.test(trimmedCell)
+                      return (
+                        <td
+                          key={cIdx}
+                          className="px-4 py-2.5 text-[#f3f3ee] whitespace-nowrap leading-relaxed"
+                        >
+                          {isId ? (
+                            <code className="px-2 py-0.5 rounded bg-[#0d0e11] text-[#cc785c] font-mono text-[11px] border border-[#2c2e3a] select-all">
+                              {trimmedCell}
+                            </code>
+                          ) : (
+                            renderInline(trimmedCell)
+                          )}
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))
               ) : null}
@@ -203,11 +223,14 @@ export const RichMarkdownRenderer: React.FC<RichMarkdownRendererProps> = ({ cont
       return
     }
 
-    // 3. Table Rows
+    // 3. Table Rows (Supports both Markdown pipe tables and tab-delimited tables)
     const isTableSeparator = /^\|?[\s-:]+\|[\s-:|]+$/.test(trimmed)
-    const isTableRow =
+    const isPipeTableRow =
       (trimmed.startsWith('|') && trimmed.includes('|', 1)) ||
       (trimmed.includes('|') && trimmed.split('|').length >= 3)
+    const isTabTableRow =
+      trimmed.includes('\t') && trimmed.split('\t').filter(Boolean).length >= 2
+    const isTableRow = isPipeTableRow || isTabTableRow
 
     if (isTableSeparator) {
       if (tableRows.length > 0) {
@@ -217,11 +240,15 @@ export const RichMarkdownRenderer: React.FC<RichMarkdownRendererProps> = ({ cont
     } else if (isTableRow) {
       flushList(`list-before-table-${lineIdx}`)
       let cleanRow = trimmed
-      if (cleanRow.startsWith('|')) cleanRow = cleanRow.substring(1)
-      if (cleanRow.endsWith('|')) cleanRow = cleanRow.substring(0, cleanRow.length - 1)
-
-      const cols = cleanRow.split('|')
-      tableRows.push(cols)
+      if (isPipeTableRow) {
+        if (cleanRow.startsWith('|')) cleanRow = cleanRow.substring(1)
+        if (cleanRow.endsWith('|')) cleanRow = cleanRow.substring(0, cleanRow.length - 1)
+        const cols = cleanRow.split('|')
+        tableRows.push(cols)
+      } else if (isTabTableRow) {
+        const cols = cleanRow.split('\t').filter(Boolean)
+        tableRows.push(cols)
+      }
       inTable = true
       return
     } else if (inTable) {

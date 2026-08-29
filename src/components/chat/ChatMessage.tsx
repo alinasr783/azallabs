@@ -120,10 +120,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           </div>
         ) : (
           /* ═══ Assistant Message — Clean output style ═══ */
-          <div className="pr-4">
+          <div className="pr-4 min-w-0 w-full overflow-hidden">
             {message.content ? (
               <>
-                <div className="text-sm text-[#e6e1cf] leading-relaxed">
+                <div className="text-sm text-[#e6e1cf] leading-relaxed min-w-0 w-full">
                   {renderContent(message.content)}
                 </div>
 

@@ -298,21 +298,22 @@
    Dark Minimalist Scrollbar
    ═══════════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(20, 21, 26, 0.6);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2b2d39;
+  background: #3e4152;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3e4152;
+  background: #cc785c;
 }
 
 /* ═══════════════════════════════════════════════════════════════
