@@ -1,0 +1,21 @@
+# Vercel config: SPA fallback + TickTick API proxy (replaces vite dev proxy)
+{
+  "rewrites": [
+    {
+      "source": "/api/ticktick/token(.*)",
+      "destination": "https://ticktick.com/oauth/token$1"
+    },
+    {
+      "source": "/api/ticktick/open(.*)",
+      "destination": "https://api.ticktick.com/open/v1$1"
+    },
+    {
+      "source": "/api/ticktick/mcp(.*)",
+      "destination": "https://mcp.ticktick.com$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
