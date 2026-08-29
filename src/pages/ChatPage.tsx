@@ -13,6 +13,7 @@ import { getVercelToken, isVercelConnected } from '../lib/vercelConnector'
 import { isComplexTask } from '../lib/orchestrator'
 import { runMultiAgentWorkflow } from '../lib/multiAgentOrchestrator'
 import { runTickTickIntent } from '../lib/ticktickIntent'
+import { runVercelIntent } from '../lib/vercelIntent'
 import { streamUnifiedLlmCompletion } from '../lib/llm/llmService'
 import { buildAgentContext } from '../lib/contextEngine'
 import { parseMemoryBlockFromText, updateMemoryItem } from '../lib/memory'
@@ -372,46 +373,120 @@ export const ChatPage: React.FC = () => {
       lastMsgContent.includes('مهامك المسجلة') ||
       lastMsgContent.includes('قوائمك')
 
-    const isTickTickIntent =
-      content.toLowerCase().includes('tick') ||
-      content.includes('تيك') ||
-      content.includes('حطلي مهمة') ||
-      content.includes('اضف مهمة') ||
-      content.includes('أضف مهمة') ||
-      content.includes('انشئ مهمة') ||
-      content.includes('أنشئ مهمة') ||
-      content.includes('اعمل مهمة') ||
-      content.includes('سجل مهمة') ||
-      content.includes('مهمة جديدة') ||
-      content.includes('مهامي') ||
-      content.includes('مشاريعي') ||
-      content.includes('قوائمي') ||
-      content.includes('جلسة تركيز') ||
-      content.includes('عاداتي') ||
-      content.toLowerCase().includes('inspire') ||
-      content.includes('حذف') ||
-      content.includes('احذف') ||
-      content.includes('ازل') ||
-      content.includes('إزالة') ||
-      content.includes('شيل') ||
-      content.includes('مسح') ||
-      content.includes('امسح') ||
-      content.includes('تخلص من') ||
-      content.toLowerCase().includes('delete') ||
-      content.toLowerCase().includes('remove') ||
-      (wasLastMsgTickTick &&
-        (content.includes('هم') ||
-          content.includes('دول') ||
-          content.includes('التلاتة') ||
-          content.includes('الثلاثة') ||
-          content.includes('الكل') ||
-          content.includes('كلهم') ||
-          content.includes('مشروع') ||
+    const wasLastMsgVercel =
+      lastMsgContent.includes('Vercel') ||
+      lastMsgContent.includes('فيرسل') ||
+      lastMsgContent.includes('فرسل')
+
+    // 1. Vercel MCP Intent Detection
+    const isVercelIntent =
+      content.toLowerCase().includes('vercel') ||
+      content.includes('فيرسل') ||
+      content.includes('فرسل') ||
+      (wasLastMsgVercel &&
+        (content.includes('مشروع') ||
           content.includes('مشاريع') ||
-          content.includes('قائمة') ||
-          content.includes('قوائم') ||
-          content.toLowerCase().includes('menu') ||
-          content.includes('منيو')))
+          content.includes('نشر') ||
+          content.includes('سجل') ||
+          content.includes('خطأ') ||
+          content.includes('أخطاء') ||
+          content.includes('تحليل') ||
+          content.includes('دومين') ||
+          content.includes('نطاق')))
+
+    if (isVercelIntent) {
+      const vToken = getVercelToken()
+      const vServer = servers.find(
+        (s) => s.service === 'vercel' || s.url.includes('vercel') || s.name.toLowerCase().includes('vercel')
+      )
+      const effectiveVercelToken = vToken || vServer?.authToken
+
+      if (!effectiveVercelToken) {
+        setAsstContent(
+          '⚠️ **خادم Vercel MCP غير مربوط حالياً.**\n\nللربط المباشر مع خادم `https://mcp.vercel.com` واستعراض مشاريعك وعمليات النشر وسجلات التشغيل، يرجى إدخال رمز الوصول الشخصي (Personal Access Token) عبر البطاقة التالية أو من [صفحة الإعدادات](/settings?tab=mcp):\n\n:::mcp-connect\n{"name": "Vercel MCP", "url": "https://mcp.vercel.com", "service": "vercel"}\n:::\n',
+          true
+        )
+        setIsLoading(false)
+        return
+      }
+
+      updateMessagePlan(activeId, asstMsgId, () => ({
+        title: `طلب Vercel: ${content.slice(0, 26)}${content.length > 26 ? '…' : ''}`,
+        items: [
+          {
+            id: 'vc_1',
+            title: 'استدعاء أداة Vercel MCP وجلب البيانات الحقيقية المؤكدة',
+            status: 'in_progress' as const,
+          },
+        ],
+      }))
+
+      try {
+        const ans = await runVercelIntent(content, effectiveVercelToken, servers, llmConfig, systemPrompt, existingMsgs)
+        setAsstContent(ans, true)
+        updateMessagePlan(activeId, asstMsgId, (prev) =>
+          prev
+            ? {
+                ...prev,
+                items: [
+                  {
+                    id: 'vc_1',
+                    title: 'تم استدعاء أداة Vercel MCP وجلب النتيجة المعتمدة',
+                    status: 'completed' as const,
+                  },
+                ],
+              }
+            : prev
+        )
+      } catch (e: any) {
+        setAsstContent(`تعذر تنفيذ طلب Vercel: ${e?.message || e}`, true)
+      }
+      setIsLoading(false)
+      return
+    }
+
+    // 2. TickTick MCP Intent Detection
+    const isTickTickIntent =
+      !isVercelIntent &&
+      (content.toLowerCase().includes('tick') ||
+        content.includes('تيك') ||
+        content.includes('حطلي مهمة') ||
+        content.includes('اضف مهمة') ||
+        content.includes('أضف مهمة') ||
+        content.includes('انشئ مهمة') ||
+        content.includes('أنشئ مهمة') ||
+        content.includes('اعمل مهمة') ||
+        content.includes('سجل مهمة') ||
+        content.includes('مهمة جديدة') ||
+        content.includes('مهامي') ||
+        content.includes('مشاريعي') ||
+        content.includes('قوائمي') ||
+        content.includes('جلسة تركيز') ||
+        content.includes('عاداتي') ||
+        content.toLowerCase().includes('inspire') ||
+        content.includes('حذف') ||
+        content.includes('احذف') ||
+        content.includes('ازل') ||
+        content.includes('إزالة') ||
+        content.includes('شيل') ||
+        content.includes('مسح') ||
+        content.includes('امسح') ||
+        content.includes('تخلص من') ||
+        content.toLowerCase().includes('delete') ||
+        content.toLowerCase().includes('remove') ||
+        (wasLastMsgTickTick &&
+          (content.includes('هم') ||
+            content.includes('دول') ||
+            content.includes('التلاتة') ||
+            content.includes('الثلاثة') ||
+            content.includes('الكل') ||
+            content.includes('كلهم') ||
+            content.includes('مشروع') ||
+            content.includes('مشاريع') ||
+            content.includes('قائمة') ||
+            content.includes('قوائم') ||
+            content.toLowerCase().includes('menu') ||
+            content.includes('منيو'))))
 
     if (isTickTickIntent) {
       if (!tickTickToken) {
@@ -455,28 +530,6 @@ export const ChatPage: React.FC = () => {
       }
       setIsLoading(false)
       return
-    }
-
-    // Check Vercel unauthenticated intent
-    const isVercelIntent =
-      (content.toLowerCase().includes('vercel') ||
-        content.includes('فيرسل') ||
-        content.includes('فرسل')) &&
-      !isTickTickIntent
-
-    if (isVercelIntent) {
-      const vToken = getVercelToken()
-      const vServer = servers.find(
-        (s) => s.service === 'vercel' || s.url.includes('vercel') || s.name.toLowerCase().includes('vercel')
-      )
-      if (!vToken && (!vServer || !vServer.authToken)) {
-        setAsstContent(
-          '⚠️ **خادم Vercel MCP غير مربوط حالياً.**\n\nللربط المباشر مع خادم `https://mcp.vercel.com` وإدارة مشاريعك وعمليات النشر وسجلات التشغيل، يرجى إدخال رمز الوصول الشخصي (Personal Access Token) عبر البطاقة التالية:\n\n:::mcp-connect\n{"name": "Vercel MCP", "url": "https://mcp.vercel.com", "service": "vercel"}\n:::\n',
-          true
-        )
-        setIsLoading(false)
-        return
-      }
     }
 
     if (isComplexTask(content) && !isTickTickIntent && !isVercelIntent) {

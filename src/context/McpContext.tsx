@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { discoverMcpToolsFromUrl } from '../lib/mcpClient'
-import { clearTickTickToken } from '../lib/ticktick'
+import { clearTickTickToken, getTickTickToken } from '../lib/ticktick'
 import { clearSupabaseConnection } from '../lib/supabaseConnector'
-import { clearVercelToken } from '../lib/vercelConnector'
+import { clearVercelToken, getVercelToken } from '../lib/vercelConnector'
 
 export interface McpToolDefinition {
   name: string
@@ -454,6 +454,63 @@ export const McpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // First-time visit only: initialize with default servers and persist
       currentServers = INITIAL_SERVERS
       localStorage.setItem(STORAGE_MCP_KEY, JSON.stringify(currentServers))
+    }
+
+    // Ensure Vercel MCP is registered if token exists in localStorage
+    const savedVercelToken = getVercelToken()
+    if (savedVercelToken) {
+      const vIdx = currentServers.findIndex(
+        (s) => s.service === 'vercel' || s.url.includes('vercel') || s.name.toLowerCase().includes('vercel')
+      )
+      if (vIdx >= 0) {
+        currentServers[vIdx] = {
+          ...currentServers[vIdx],
+          status: 'connected',
+          isEnabled: true,
+          authToken: savedVercelToken,
+          tools: currentServers[vIdx].tools?.length ? currentServers[vIdx].tools : VERCEL_MCP_TOOLS,
+        }
+      } else {
+        currentServers.push({
+          id: 'mcp_vercel',
+          name: 'Vercel MCP',
+          url: 'https://mcp.vercel.com',
+          service: 'vercel',
+          status: 'connected',
+          isEnabled: true,
+          authToken: savedVercelToken,
+          tools: VERCEL_MCP_TOOLS,
+          connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        })
+      }
+    }
+
+    // Ensure TickTick MCP is registered if token exists in localStorage
+    const savedTickToken = getTickTickToken()
+    if (savedTickToken) {
+      const tIdx = currentServers.findIndex(
+        (s) => s.service === 'ticktick' || s.url.includes('ticktick') || s.name.toLowerCase().includes('tick')
+      )
+      if (tIdx >= 0) {
+        currentServers[tIdx] = {
+          ...currentServers[tIdx],
+          status: 'connected',
+          isEnabled: true,
+          authToken: savedTickToken,
+        }
+      } else {
+        currentServers.push({
+          id: 'mcp_ticktick',
+          name: 'TickTick MCP',
+          url: 'https://mcp.ticktick.com',
+          service: 'ticktick',
+          status: 'connected',
+          isEnabled: true,
+          authToken: savedTickToken,
+          tools: TICKTICK_MCP_TOOLS,
+          connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        })
+      }
     }
 
     setServers(currentServers)
