@@ -1490,7 +1490,7 @@ ${universalMcpContext}
   const totalTodoCount = activePlan?.items.length || 0
 
   return (
-    <div className="flex h-screen w-full bg-[#0d0e11] overflow-hidden text-[#f3f3ee]">
+    <div className="flex h-[100dvh] w-full bg-[#0d0e11] overflow-hidden text-[#f3f3ee]">
       {/* ═══ Sidebar (Right in RTL) ═══ */}
       <ChatSidebar
         tasks={tasks}

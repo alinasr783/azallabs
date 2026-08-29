@@ -431,7 +431,7 @@ export const SettingsPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#0d0e11] text-[#f3f3ee]" dir="rtl">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#131418]/90 backdrop-blur-md border-b border-[#22242c] px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <header className="sticky top-0 z-30 bg-[#131418]/90 backdrop-blur-md border-b border-[#22242c] px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
             to="/"
@@ -456,10 +456,10 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1 bg-[#181920] border border-[#262833] p-1 rounded-2xl">
+        <div className="flex items-center gap-1 bg-[#181920] border border-[#262833] p-1 rounded-2xl overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none] w-full">
           <button
             onClick={() => handleTabChange('llm')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'llm'
                 ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
                 : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
@@ -471,7 +471,7 @@ export const SettingsPage: React.FC = () => {
 
           <button
             onClick={() => handleTabChange('system-prompt')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'system-prompt'
                 ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
                 : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
@@ -483,7 +483,7 @@ export const SettingsPage: React.FC = () => {
 
           <button
             onClick={() => handleTabChange('memory')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'memory'
                 ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
                 : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
@@ -495,7 +495,7 @@ export const SettingsPage: React.FC = () => {
 
           <button
             onClick={() => handleTabChange('mcp')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'mcp'
                 ? 'bg-[#cc785c] text-white shadow-sm font-semibold'
                 : 'text-[#9da0a8] hover:text-[#f3f3ee] hover:bg-[#20222c]'
@@ -507,7 +507,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-6 space-y-8">
+      <main className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
         {/* ========================================================= */}
         {/* TAB 1: LLM PROVIDERS                                      */}
         {/* ========================================================= */}
@@ -525,13 +525,13 @@ export const SettingsPage: React.FC = () => {
             <div className="grid grid-cols-1 gap-5">
               {/* 1. Google Gemini */}
               <div
-                className={`p-5 rounded-2xl border transition-all ${
+                className={`p-4 rounded-2xl border transition-all ${
                   llmConfig.activeProvider === 'gemini'
                     ? 'border-[#cc785c] bg-[#cc785c]/10 shadow-xs'
                     : 'border-[#262833] bg-[#14151a]'
                 }`}
               >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-[#cc785c]/15 text-[#cc785c] flex items-center justify-center font-bold text-sm">
                       G
@@ -622,13 +622,13 @@ export const SettingsPage: React.FC = () => {
 
               {/* 2. OpenAI */}
               <div
-                className={`p-5 rounded-2xl border transition-all ${
+                className={`p-4 rounded-2xl border transition-all ${
                   llmConfig.activeProvider === 'openai'
                     ? 'border-[#cc785c] bg-[#cc785c]/10 shadow-xs'
                     : 'border-[#262833] bg-[#14151a]'
                 }`}
               >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-[#cc785c]/15 text-[#cc785c] flex items-center justify-center font-bold text-sm">
                       O
@@ -716,13 +716,13 @@ export const SettingsPage: React.FC = () => {
 
               {/* 3. DeepSeek */}
               <div
-                className={`p-5 rounded-2xl border transition-all ${
+                className={`p-4 rounded-2xl border transition-all ${
                   llmConfig.activeProvider === 'deepseek'
                     ? 'border-[#cc785c] bg-[#cc785c]/10 shadow-xs'
                     : 'border-[#262833] bg-[#14151a]'
                 }`}
               >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-[#cc785c]/15 text-[#cc785c] flex items-center justify-center font-bold text-sm">
                       D
@@ -810,13 +810,13 @@ export const SettingsPage: React.FC = () => {
 
               {/* 4. Custom (OpenAI-Compatible) */}
               <div
-                className={`p-5 rounded-2xl border transition-all ${
+                className={`p-4 rounded-2xl border transition-all ${
                   llmConfig.activeProvider === 'custom'
                     ? 'border-[#cc785c] bg-[#cc785c]/10 shadow-xs'
                     : 'border-[#262833] bg-[#14151a]'
                 }`}
               >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-[#cc785c]/15 text-[#cc785c] flex items-center justify-center font-bold text-sm">
                       C

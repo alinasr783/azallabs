@@ -7,7 +7,7 @@ export const DashboardLayout: React.FC = () => {
   const { lastSavedAt } = useAgentConfig()
 
   return (
-    <div className="min-h-screen w-full bg-[#0d0e11] flex flex-col text-[#f3f3ee]" dir="rtl">
+    <div className="min-h-[100dvh] w-full bg-[#0d0e11] flex flex-col text-[#f3f3ee]" dir="rtl">
       {/* Top Header */}
       <header className="h-16 bg-[#14151a] border-b border-[#262833] px-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-4 min-w-0">

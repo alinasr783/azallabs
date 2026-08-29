@@ -223,7 +223,15 @@ ${fmt}`
 function formatTickTickResult(tool: string, params: Record<string, any>, result: any): string {
   if (tool === 'list_projects') {
     const projects = (result?.projects as any[]) || []
-    if (!projects.length) return 'لا توجد أي مشاريع/قوائم مسجلة حالياً في حسابك على TickTick.'
+    if (!projects.length)
+      return (
+        'لا توجد أي قوائم/مشاريع ظاهرة في حساب TickTick المربوط حالياً.\n\n' +
+        '⚠️ **ملاحظة مهمة عن قيود TickTick Open API:** هذه الواجهة لا تستطيع قراءة "صندوق الوارد" (Inbox) ولا تبحث في كل المهام عبر الحساب — فهي تعرض **فقط** القوائم (Lists/Projects) التي أنشأتها صراحةً في TickTick. لذلك قد يكون السبب:\n' +
+        '• مهامك كلها داخل الـ Inbox ولا تظهر هنا (قيد معروف في واجهة TickTick الرسمية).\n' +
+        '• الحساب الذي ربطته ليس هو الحساب الذي عليه مشاريعك — أعد الربط بالحساب الصحيح من صفحة الإعدادات.\n' +
+        '• لم تنشئ أي قائمة بعد.\n\n' +
+        '✅ **للحل السريع:** أنشئ قائمة في TickTick (مثلاً «800 Academy»)، أو قل «أنشئ مهمة بعنوان تجربة في مشروع 800 Academy» وسينشئها التطبيق تلقائياً، ثم اسأل مجدداً عن مشاريعك.'
+      )
     return `### 📂 مشاريعك المسجلة في TickTick (${projects.length})\n` +
       projects.map((p: any, i: number) => `${i + 1}. **${p.name || p.title}**${p.id ? ` — (id: ${p.id})` : ''}`).join('\n')
   }
