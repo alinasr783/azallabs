@@ -34,4 +34,24 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 5174,
+    proxy: {
+      '/api/ticktick/token': {
+        target: 'https://ticktick.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ticktick\/token/, '/oauth/token'),
+      },
+      '/api/ticktick/open': {
+        target: 'https://api.ticktick.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ticktick\/open/, '/open/v1'),
+      },
+      '/api/ticktick/mcp': {
+        target: 'https://mcp.ticktick.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ticktick\/mcp/, ''),
+      },
+    },
+  },
 })

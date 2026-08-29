@@ -180,7 +180,11 @@ export async function runTickTickIntent(
   // ---------- execute server-side (real data) ----------
   const execResult = await exec(tool, params)
   if (!execResult.success) {
-    return `تعذر تنفيذ العملية في TickTick: ${execResult.errorMessage || 'خطأ غير معروف'}`
+    const msg = execResult.errorMessage || 'خطأ غير معروف'
+    if (/HTML|توكن|proxy|ربط|انتهت صلاحية|غير صالح|صلاحية/i.test(msg)) {
+      return `⚠️ ${msg}\n\n🔗 لإصلاح ذلك: افتح صفحة الإعدادات ← تبويب خوادم الربط، واضغط «إلغاء الربط» ثم «ربط TickTick» من جديد لتجديد التوكن. ثم أعد المحاولة.`
+    }
+    return `تعذر تنفيذ العملية في TickTick: ${msg}`
   }
 
   return naturalTickTickAnswer(tool, params, execResult.result, content, systemPrompt, llmConfig)

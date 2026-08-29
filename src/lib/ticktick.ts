@@ -24,6 +24,63 @@ export const clearTickTickToken = () => {
   localStorage.removeItem(TICKTICK_TOKEN_KEY)
 }
 
+/**
+ * Parse a TickTick API response as JSON, with resilient handling for the two
+ * real-world failure modes that otherwise surface as the opaque
+ * "Unexpected token '<', '<!doctype' is not valid JSON" error:
+ *   1. The access token is invalid/expired → TickTick (or the SPA fallback when
+ *      running without the dev proxy) returns an HTML page instead of JSON.
+ *   2. Any non-JSON (HTML) body — e.g. when the /api/ticktick proxy is missing
+ *      because the app is served from a build/preview server instead of `vite dev`.
+ * On an auth failure we clear the stored token so the user is prompted to reconnect.
+ */
+async function parseTickTickJson(response: Response, label: string): Promise<any> {
+  const raw = await response.text()
+  const trimmed = raw.trimStart()
+
+  if (trimmed.startsWith('<!') || trimmed.toLowerCase().startsWith('<!doctype')) {
+    if (response.status === 401 || response.status === 403) {
+      clearTickTickToken()
+      throw new Error(
+        `انتهت صلاحية أو رُفض توكن TickTick (${response.status}). أعد ربط حسابك من صفحة الإعدادات ثم أعد المحاولة.`
+      )
+    }
+    throw new Error(
+      `رجّع خادم TickTick صفحة HTML بدل JSON عند "${label}". الأسباب المحتملة: (1) توكن TickTick غير صالح/منتهٍ — أعد ربطه من الإعدادات، أو (2) خادم الـ API proxy غير مُفعّل — شغّل التطبيق عبر "vite dev" (أو أضف preview.proxy للنسخة المبنية).`
+    )
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    clearTickTickToken()
+    let detail = raw
+    try {
+      const j = JSON.parse(raw)
+      detail = j?.error_description || j?.error || j?.message || raw
+    } catch {
+      /* keep raw */
+    }
+    throw new Error(`توكن TickTick غير صالح أو منتهٍ (${response.status}): ${detail}. أعد ربط حسابك من الإعدادات.`)
+  }
+
+  if (!response.ok) {
+    let detail = raw
+    try {
+      const j = JSON.parse(raw)
+      detail = j?.error_description || j?.error || j?.message || raw
+    } catch {
+      /* keep raw */
+    }
+    throw new Error(`فشل ${label} في TickTick (${response.status}): ${detail}`)
+  }
+
+  if (trimmed.length === 0) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw new Error(`تعذّر تحليل رد TickTick كـ JSON عند "${label}".`)
+  }
+}
+
 // 1. توليد رابط تفويض OAuth الحقيقي
 export const getTickTickAuthUrl = () => {
   const redirectUri = getRedirectUri()
@@ -58,12 +115,7 @@ export const exchangeTickTickCode = async (code: string): Promise<{ access_token
     body: bodyParams.toString(),
   })
 
-  if (!response.ok) {
-    const errText = await response.text()
-    throw new Error(`فشل استلام التوكن من TickTick (${response.status}): ${errText}`)
-  }
-
-  const data = await response.json()
+  const data = await parseTickTickJson(response, 'تبادل التوكن')
   if (!data.access_token) {
     throw new Error(data.error_description || data.error || 'لم يتم استلام access_token من TickTick')
   }
@@ -96,11 +148,7 @@ export const fetchTickTickProjects = async (token?: string): Promise<TickTickPro
     })
 
     clearTimeout(timer)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch projects from TickTick (${response.status})`)
-    }
-
-    return await response.json()
+    return await parseTickTickJson(response, 'جلب المشاريع')
   } catch (err) {
     clearTimeout(timer)
     throw err
@@ -121,11 +169,7 @@ export const createTickTickProject = async (name: string, token?: string): Promi
     body: JSON.stringify({ name }),
   })
 
-  if (!response.ok) {
-    throw new Error(`فشل إنشاء المشروع في TickTick (${response.status})`)
-  }
-
-  return await response.json()
+  return await parseTickTickJson(response, 'إنشاء المشروع')
 }
 
 // 5. البحث عن مشروع بالاسم أو إنشاؤه
@@ -217,12 +261,7 @@ export const createTickTickTask = async (
     body: JSON.stringify(payload),
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`فشل إنشاء المهمة في TickTick (${response.status}): ${errorText}`)
-  }
-
-  const createdTask = await response.json()
+  const createdTask = await parseTickTickJson(response, 'إنشاء المهمة')
   return {
     ...createdTask,
     targetProjectName: task.projectName,
@@ -253,11 +292,7 @@ export const fetchProjectData = async (
     },
   })
 
-  if (!response.ok) {
-    throw new Error(`فشل جلب مهام المشروع من TickTick (${response.status})`)
-  }
-
-  const data = await response.json()
+  const data = await parseTickTickJson(response, 'جلب بيانات المشروع')
   return {
     project: data.project,
     tasks: Array.isArray(data.tasks) ? data.tasks : [],
@@ -320,12 +355,7 @@ export const updateTickTickTask = async (
     body: JSON.stringify(payload),
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`فشل تحديث المهمة في TickTick (${response.status}): ${errorText}`)
-  }
-
-  return await response.json()
+  return await parseTickTickJson(response, 'تحديث المهمة')
 }
 
 // 10. حذف مشروع من TickTick نهائياً (لا يمكن التراجع عنه)
@@ -341,10 +371,7 @@ export const deleteTickTickProject = async (projectId: string, token?: string): 
     },
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`فشل حذف المشروع من TickTick (${response.status}): ${errorText}`)
-  }
+  await parseTickTickJson(response, 'حذف المشروع')
 }
 
 // 11. حذف مهمة من TickTick نهائياً (لا يمكن التراجع عنه)
@@ -369,8 +396,5 @@ export const deleteTickTickTask = async (
     }
   )
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`فشل حذف المهمة من TickTick (${response.status}): ${errorText}`)
-  }
+  await parseTickTickJson(response, 'حذف المهمة')
 }
