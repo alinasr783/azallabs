@@ -8,6 +8,18 @@ import {
   setTickTickToken,
   getRedirectUri,
 } from '../../lib/ticktick'
+import {
+  getVercelToken,
+  setVercelToken,
+  clearVercelToken,
+  testVercelConnection,
+} from '../../lib/vercelConnector'
+import {
+  getGitHubToken,
+  setGitHubToken,
+  clearGitHubToken,
+  testGitHubConnection,
+} from '../../lib/githubConnector'
 
 interface McpConnectCardProps {
   name: string
@@ -18,26 +30,52 @@ interface McpConnectCardProps {
 export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, service = 'custom' }) => {
   const { getServerByUrl, disconnectServer, connectServer } = useMcp()
   const existingServer = getServerByUrl(url)
-  const isConnected = existingServer?.status === 'connected' || Boolean(getTickTickToken() && url.includes('ticktick'))
-
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isCreatingTask, setIsCreatingTask] = useState(false)
-  const [taskCreatedMsg, setTaskCreatedMsg] = useState<string | null>(null)
-  const [manualToken, setManualToken] = useState('')
-  const [showManualInput, setShowManualInput] = useState(false)
-  const [tokenSaved, setTokenSaved] = useState(false)
 
   const isTickTick = url.includes('ticktick') || service === 'ticktick'
+  const isVercel = url.includes('vercel') || service === 'vercel'
+  const isGitHub = url.includes('github') || service === 'github'
 
-  const handleSaveManualToken = async () => {
+  const isConnected =
+    existingServer?.status === 'connected' ||
+    Boolean(isTickTick && getTickTickToken()) ||
+    Boolean(isVercel && getVercelToken()) ||
+    Boolean(isGitHub && getGitHubToken())
+
+  const [manualToken, setManualToken] = useState('')
+  const [showManualInput, setShowManualInput] = useState(!isConnected && (isVercel || isGitHub))
+  const [tokenSaved, setTokenSaved] = useState(false)
+  const [testResultMsg, setTestResultMsg] = useState<string | null>(null)
+  const [isTesting, setIsTesting] = useState(false)
+
+  const handleSaveToken = async () => {
     if (!manualToken.trim()) return
-    setTickTickToken(manualToken.trim())
-    await connectServer({
-      name: 'TickTick MCP',
-      url: 'https://mcp.ticktick.com',
-      service: 'ticktick',
-      authToken: manualToken.trim(),
-    })
+
+    if (isTickTick) {
+      setTickTickToken(manualToken.trim())
+      await connectServer({
+        name: 'TickTick MCP',
+        url: 'https://mcp.ticktick.com',
+        service: 'ticktick',
+        authToken: manualToken.trim(),
+      })
+    } else if (isVercel) {
+      setVercelToken(manualToken.trim())
+      await connectServer({
+        name: 'Vercel MCP',
+        url: 'https://mcp.vercel.com',
+        service: 'vercel',
+        authToken: manualToken.trim(),
+      })
+    } else if (isGitHub) {
+      setGitHubToken(manualToken.trim())
+      await connectServer({
+        name: 'GitHub MCP',
+        url: 'https://api.githubcopilot.com/mcp/',
+        service: 'github',
+        authToken: manualToken.trim(),
+      })
+    }
+
     setTokenSaved(true)
     setTimeout(() => {
       window.location.reload()
@@ -48,38 +86,62 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
     if (isTickTick) {
       window.location.href = getTickTickAuthUrl()
     } else {
-      setIsModalOpen(true)
+      setShowManualInput(true)
     }
   }
 
-  const handleCreateTestTask = async () => {
-    setIsCreatingTask(true)
-    setTaskCreatedMsg(null)
+  const handleTestConnection = async () => {
+    setIsTesting(true)
+    setTestResultMsg(null)
     try {
-      const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      const res = await createTickTickTask({
-        title: `Azal Labs Test Task (${now})`,
-        content: 'This task was created automatically via Azal Labs integration with your TickTick account.',
-      })
-      setTaskCreatedMsg(`تم إنشاء المهمة بنجاح: "${res.title}"`)
-      setTimeout(() => setTaskCreatedMsg(null), 5000)
+      if (isTickTick) {
+        const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        const res = await createTickTickTask({
+          title: `Azal Labs Test Task (${now})`,
+          content: 'This task was created automatically via Azal Labs integration with your TickTick account.',
+        })
+        setTestResultMsg(`تم إنشاء المهمة بنجاح: "${res.title}"`)
+      } else if (isVercel) {
+        const res = await testVercelConnection()
+        if (res.success && res.user) {
+          setTestResultMsg(`متصل كـ: ${res.user.username} (${res.user.email})`)
+        } else {
+          setTestResultMsg(res.error || 'فشل الاختبار')
+        }
+      } else if (isGitHub) {
+        const res = await testGitHubConnection()
+        if (res.success && res.user) {
+          setTestResultMsg(`متصل كـ: @${res.user.login} (${res.user.public_repos ?? 0} مستودع عام)`)
+        } else {
+          setTestResultMsg(res.error || 'فشل الاختبار')
+        }
+      }
+      setTimeout(() => setTestResultMsg(null), 6000)
     } catch (err: any) {
-      setTaskCreatedMsg(`خطأ: ${err.message}`)
+      setTestResultMsg(`خطأ: ${err.message}`)
     } finally {
-      setIsCreatingTask(false)
+      setIsTesting(false)
     }
   }
 
   const handleDisconnect = async () => {
-    if (isTickTick) {
-      clearTickTickToken()
-    }
+    if (isTickTick) clearTickTickToken()
+    if (isVercel) clearVercelToken()
+    if (isGitHub) clearGitHubToken()
     if (existingServer) {
       await disconnectServer(existingServer.id)
     }
   }
 
-  const displayName = name || (isTickTick ? 'TickTick MCP' : 'MCP Server')
+  const displayName =
+    name ||
+    (isTickTick
+      ? 'TickTick MCP'
+      : isVercel
+      ? 'Vercel MCP'
+      : isGitHub
+      ? 'GitHub MCP'
+      : 'MCP Server')
 
   return (
     <>
@@ -111,12 +173,16 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
         {/* Description */}
         <p className="text-xs text-[#9da0a8] mb-2.5 leading-relaxed">
           {isConnected
-            ? `تم ربط حسابك بنجاح عبر بروتوكول الربط (MCP). يستطيع الوكيل الآن إدارة ومزامنة مهامك الفعلية.`
+            ? `تم ربط حسابك بنجاح عبر بروتوكول الربط (MCP). يستطيع الوكيل الآن استدعاء الأدوات المعتمدة وتنفيذ أوامرك فورياً.`
+            : isGitHub
+            ? `يتيح خادم GitHub MCP للمساعد استعراض المستودعات، إدارة الـ Issues و PRs، وفحص الأكواد والملفات مباشرة.`
+            : isVercel
+            ? `يتيح خادم Vercel MCP للمساعد استعراض المشاريع، متابعة عمليات النشر، وفحص سجلات التشغيل وأخطاء بيئة الإنتاج.`
             : `يتيح خادم الربط (MCP) للمساعد الاتصال بحسابك لإدارة وتنظيم المهام مباشرة.`}
         </p>
 
-        {/* Live Test Task Box if connected */}
-        {isConnected && isTickTick && (
+        {/* Live Test Box if connected */}
+        {isConnected && (isTickTick || isVercel || isGitHub) && (
           <div className="mb-2.5 p-2.5 rounded bg-[#0d0e11] border border-[#2c2e3a] space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-[#9da0a8]">
@@ -124,23 +190,23 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
               </span>
               <button
                 type="button"
-                onClick={handleCreateTestTask}
-                disabled={isCreatingTask}
+                onClick={handleTestConnection}
+                disabled={isTesting}
                 className="px-2.5 py-1 rounded bg-[#cc785c] hover:bg-[#be684e] text-white text-[11px] font-medium transition-colors disabled:opacity-50 cursor-pointer"
               >
-                {isCreatingTask ? 'جاري الإنشاء...' : '+ مهمة اختبارية'}
+                {isTesting ? 'جاري الفحص...' : isTickTick ? '+ مهمة اختبارية' : '⚡ فحص الحساب الآن'}
               </button>
             </div>
 
-            {taskCreatedMsg && (
+            {testResultMsg && (
               <div className="text-[11px] p-1.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50">
-                ✔ {taskCreatedMsg}
+                ✔ {testResultMsg}
               </div>
             )}
           </div>
         )}
 
-        {/* Action Button */}
+        {/* Action Button & Input */}
         <div className="pt-2 border-t border-[#2c2e3a] flex items-center justify-between">
           {isConnected ? (
             <>
@@ -158,46 +224,81 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
           ) : (
             <div className="w-full space-y-2">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleStartOAuth}
-                  className="px-3 py-1.5 rounded bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  الاتصال عبر التوثيق السريع (OAuth)
-                </button>
-
                 {isTickTick && (
                   <button
                     type="button"
-                    onClick={() => setShowManualInput(!showManualInput)}
-                    className="px-2.5 py-1.5 rounded border border-[#2c2e3a] text-[11px] text-[#6b6e79] hover:text-[#f3f3ee] transition-colors cursor-pointer"
+                    onClick={handleStartOAuth}
+                    className="px-3 py-1.5 rounded bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-colors cursor-pointer"
                   >
-                    {showManualInput ? 'إخفاء' : 'إدخال (Token) يدوياً'}
+                    الاتصال عبر التوثيق السريع (OAuth)
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowManualInput(!showManualInput)}
+                  className="px-2.5 py-1.5 rounded border border-[#2c2e3a] text-[11px] text-[#6b6e79] hover:text-[#f3f3ee] transition-colors cursor-pointer"
+                >
+                  {showManualInput ? 'إخفاء' : 'إدخال رمز الوصول (Token)'}
+                </button>
               </div>
 
-              {showManualInput && isTickTick && (
+              {showManualInput && (
                 <div className="p-2 rounded bg-[#0d0e11] border border-[#2c2e3a] space-y-1.5">
                   <div className="flex items-center gap-1.5">
                     <input
                       type="password"
                       value={manualToken}
                       onChange={(e) => setManualToken(e.target.value)}
-                      placeholder="الصق المفتاح (Token) هنا..."
+                      placeholder={
+                        isGitHub
+                          ? 'الصق رمز الوصول (ghp_...)'
+                          : isVercel
+                          ? 'الصق رمز الوصول (Personal Access Token)...'
+                          : 'الصق المفتاح (Token) هنا...'
+                      }
                       className="flex-1 px-2.5 py-1 rounded border border-[#2c2e3a] bg-[#14151a] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none"
                     />
                     <button
                       type="button"
-                      onClick={handleSaveManualToken}
+                      onClick={handleSaveToken}
                       disabled={!manualToken.trim()}
                       className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       {tokenSaved ? 'تم الحفظ!' : 'حفظ'}
                     </button>
                   </div>
+
+                  {isGitHub && (
+                    <div className="text-[10px] text-[#6b6e79] pt-1">
+                      💡 يمكنك إنشاء رمز وصول بصلاحيات (repo, workflow, read:org) من{' '}
+                      <a
+                        href="https://github.com/settings/tokens/new?scopes=repo,read:org,read:user,workflow"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#cc785c] underline"
+                      >
+                        صفحة إعدادات GitHub Tokens
+                      </a>
+                    </div>
+                  )}
+
+                  {isVercel && (
+                    <div className="text-[10px] text-[#6b6e79] pt-1">
+                      💡 يمكنك إنشاء رمز وصول من{' '}
+                      <a
+                        href="https://vercel.com/account/tokens"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#cc785c] underline"
+                      >
+                        صفحة إعدادات Vercel Tokens
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
+
               {isTickTick && (
                 <div className="pt-1 text-[10px] text-[#6b6e79] flex flex-wrap items-center gap-1">
                   <span>رابط إعادة التوجيه:</span>
@@ -210,29 +311,6 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
           )}
         </div>
       </div>
-
-      {/* Generic Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[#14151a] border border-[#2c2e3a] rounded-lg p-4 text-right">
-            <h3 className="text-sm font-semibold text-[#f3f3ee] mb-1">
-              ربط خادم (MCP)
-            </h3>
-            <p className="text-xs text-[#6b6e79] mb-3 font-mono">
-              {url}
-            </p>
-            <div className="flex justify-end pt-2 border-t border-[#2c2e3a]">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-3 py-1 text-xs text-[#6b6e79] hover:text-[#f3f3ee] cursor-pointer"
-              >
-                إغلاق
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

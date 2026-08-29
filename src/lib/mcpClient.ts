@@ -27,6 +27,16 @@ import {
   fetchVercelRuntimeLogs,
   resolveVercelContext,
 } from './vercelConnector'
+import {
+  getGitHubToken,
+  fetchGitHubRepos,
+  fetchGitHubRepoIssues,
+  fetchGitHubRepoPulls,
+  fetchGitHubRepoCommits,
+  fetchGitHubRepoBranches,
+  fetchGitHubFileContents,
+  resolveGitHubContext,
+} from './githubConnector'
 
 export interface McpExecutionResult {
   success: boolean
@@ -791,6 +801,355 @@ async function executeVercelTool(
 }
 
 // =========================================================================
+// GITHUB MCP TOOL EXECUTION (DIRECT JSON-RPC + RESILIENT REST FALLBACK)
+// =========================================================================
+async function executeGitHubTool(
+  toolName: string,
+  parameters: Record<string, any> = {},
+  authToken?: string,
+  serverUrl: string = 'https://api.githubcopilot.com/mcp/'
+): Promise<McpExecutionResult> {
+  const token = authToken || getGitHubToken()
+  const effectiveParams: Record<string, any> = { ...parameters }
+
+  // Auto-resolve missing owner / repo for tools that require repository context
+  const requiresRepoContext = [
+    'get_file_contents',
+    'create_or_update_file',
+    'delete_file',
+    'push_files',
+    'list_commits',
+    'get_commit',
+    'list_branches',
+    'create_branch',
+    'list_releases',
+    'get_latest_release',
+    'list_tags',
+    'list_repository_collaborators',
+    'list_issues',
+    'issue_read',
+    'issue_write',
+    'add_issue_comment',
+    'list_label',
+    'label_write',
+    'list_pull_requests',
+    'pull_request_read',
+    'create_pull_request',
+    'update_pull_request',
+    'merge_pull_request',
+    'actions_list',
+    'actions_get',
+    'get_job_logs',
+    'actions_run_trigger',
+    'get_repository_tree',
+    'list_discussions',
+    'get_discussion',
+    'list_code_scanning_alerts',
+    'list_dependabot_alerts',
+    'list_secret_scanning_alerts',
+    'star_repository',
+  ].includes(toolName)
+
+  let resolvedContext: any = null
+  if (token && requiresRepoContext && (!effectiveParams.owner || !effectiveParams.repo)) {
+    try {
+      const requested = effectiveParams.repository || effectiveParams.repo || effectiveParams.repo_name || effectiveParams.project
+      resolvedContext = await resolveGitHubContext(token, requested)
+      if (resolvedContext.owner && !effectiveParams.owner) {
+        effectiveParams.owner = resolvedContext.owner
+      }
+      if (resolvedContext.repo && !effectiveParams.repo) {
+        effectiveParams.repo = resolvedContext.repo
+      }
+    } catch {}
+  }
+
+  // 1. Primary: Direct JSON-RPC call to https://api.githubcopilot.com/mcp/ (tools/call)
+  if (token) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 9000)
+
+      const response = await fetch(serverUrl || 'https://api.githubcopilot.com/mcp/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          Authorization: `Bearer ${token}`,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: effectiveParams,
+          },
+          id: Date.now(),
+        }),
+      })
+
+      clearTimeout(timeoutId)
+
+      if (response.ok) {
+        const text = await response.text()
+        let json: any = null
+        try {
+          json = JSON.parse(text)
+        } catch {
+          const lines = text.split('\n').filter((l) => l.startsWith('data:'))
+          if (lines.length > 0) {
+            const payloadStr = lines[lines.length - 1].replace(/^data:\s*/, '').trim()
+            if (payloadStr) json = JSON.parse(payloadStr)
+          }
+        }
+
+        if (json) {
+          if (json.error) {
+            console.warn('GitHub MCP server returned error:', json.error)
+          } else {
+            const rawResult = json.result
+            let parsedData = rawResult
+            if (rawResult?.content && Array.isArray(rawResult.content) && rawResult.content.length > 0) {
+              const textContent = rawResult.content.find((c: any) => c.type === 'text')?.text
+              if (textContent) {
+                try {
+                  parsedData = JSON.parse(textContent)
+                } catch {
+                  parsedData = textContent
+                }
+              }
+            }
+            return {
+              success: true,
+              result: parsedData,
+              serverName: 'GitHub MCP',
+              toolName,
+            }
+          }
+        }
+      }
+    } catch (rpcErr: any) {
+      console.warn('GitHub MCP JSON-RPC direct call failed, activating REST fallback:', rpcErr)
+    }
+
+    // 2. Resilient REST Fallback: Direct GitHub REST API calls
+    try {
+      const owner = effectiveParams.owner || resolvedContext?.owner
+      const repo = effectiveParams.repo || resolvedContext?.repo
+
+      if (toolName === 'search_repositories' || toolName === 'list_repositories') {
+        const query = effectiveParams.query
+        if (query) {
+          const res = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&per_page=20`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+            },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            return { success: true, result: data.items || data, serverName: 'GitHub MCP', toolName }
+          }
+        }
+        const data = await fetchGitHubRepos(token, 'updated', 30)
+        return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+      }
+
+      if (toolName === 'list_issues') {
+        if (owner && repo) {
+          const data = await fetchGitHubRepoIssues(owner, repo, token, effectiveParams.state || 'open')
+          return {
+            success: true,
+            result: { owner, repo, issues: data },
+            serverName: 'GitHub MCP',
+            toolName,
+          }
+        }
+      }
+
+      if (toolName === 'issue_read') {
+        const issueNum = effectiveParams.issue_number || effectiveParams.issueNumber
+        if (owner && repo && issueNum) {
+          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNum}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+            },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+          }
+        }
+      }
+
+      if (toolName === 'list_pull_requests') {
+        if (owner && repo) {
+          const data = await fetchGitHubRepoPulls(owner, repo, token, effectiveParams.state || 'open')
+          return {
+            success: true,
+            result: { owner, repo, pull_requests: data },
+            serverName: 'GitHub MCP',
+            toolName,
+          }
+        }
+      }
+
+      if (toolName === 'pull_request_read') {
+        const prNum = effectiveParams.pullNumber || effectiveParams.pull_number || effectiveParams.issue_number
+        if (owner && repo && prNum) {
+          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNum}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+            },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+          }
+        }
+      }
+
+      if (toolName === 'list_commits') {
+        if (owner && repo) {
+          const data = await fetchGitHubRepoCommits(owner, repo, token, effectiveParams.perPage || 20)
+          return {
+            success: true,
+            result: { owner, repo, commits: data },
+            serverName: 'GitHub MCP',
+            toolName,
+          }
+        }
+      }
+
+      if (toolName === 'get_commit') {
+        const sha = effectiveParams.sha
+        if (owner && repo && sha) {
+          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${sha}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+            },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+          }
+        }
+      }
+
+      if (toolName === 'list_branches') {
+        if (owner && repo) {
+          const data = await fetchGitHubRepoBranches(owner, repo, token)
+          return {
+            success: true,
+            result: { owner, repo, branches: data },
+            serverName: 'GitHub MCP',
+            toolName,
+          }
+        }
+      }
+
+      if (toolName === 'get_file_contents') {
+        if (owner && repo) {
+          const data = await fetchGitHubFileContents(owner, repo, effectiveParams.path || '', token)
+          return {
+            success: true,
+            result: { owner, repo, path: effectiveParams.path, content: data },
+            serverName: 'GitHub MCP',
+            toolName,
+          }
+        }
+      }
+
+      if (toolName === 'get_repository_tree') {
+        if (owner && repo) {
+          const treeSha = effectiveParams.tree_sha || resolvedContext?.defaultBranch || 'main'
+          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+            },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            return { success: true, result: { owner, repo, tree: data.tree || data }, serverName: 'GitHub MCP', toolName }
+          }
+        }
+      }
+
+      if (toolName === 'get_me') {
+        const res = await fetch('https://api.github.com/user', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+          },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+        }
+      }
+
+      if (toolName === 'list_starred_repositories') {
+        const res = await fetch('https://api.github.com/user/starred?per_page=20', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+          },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+        }
+      }
+
+      if (toolName === 'list_notifications') {
+        const res = await fetch('https://api.github.com/notifications?per_page=20', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+          },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          return { success: true, result: data, serverName: 'GitHub MCP', toolName }
+        }
+      }
+
+      if (toolName === 'github_support_docs_search') {
+        const query = effectiveParams.query || ''
+        return {
+          success: true,
+          result: {
+            query,
+            docsUrl: `https://docs.github.com/en/search?query=${encodeURIComponent(query)}`,
+            message: `نتائج استعلام توثيق GitHub لموضوع "${query}". يمكنك زيارة https://docs.github.com`,
+          },
+          serverName: 'GitHub MCP',
+          toolName,
+        }
+      }
+    } catch (fallbackErr: any) {
+      console.warn('GitHub REST fallback error:', fallbackErr)
+    }
+  }
+
+  // 3. Fallback when not configured or token missing
+  return {
+    success: false,
+    result: null,
+    errorMessage: token
+      ? `تعذر تنفيذ الأداة "${toolName}" على خادم GitHub MCP. يرجى التأكد من صلاحيات رمز الوصول (PAT Scopes: repo, workflow, read:org).`
+      : 'لم يتم ربط حساب GitHub بعد أو لم يتم إدخال رمز الوصول (Personal Access Token). يرجى ربطه من صفحة الإعدادات أو عبر بطاقة الربط.',
+    serverName: 'GitHub MCP',
+    toolName,
+  }
+}
+
+// =========================================================================
 // DYNAMIC MCP TOOL EXECUTION VIA STANDARD JSON-RPC (tools/call)
 // =========================================================================
 export async function executeMcpTool(
@@ -845,6 +1204,16 @@ export async function executeMcpTool(
     (server?.url && server.url.includes('vercel'))
   if (isVercel) {
     return await executeVercelTool(toolName, parameters, server?.authToken, server?.url)
+  }
+
+  // GitHub MCP is routed directly via https://api.githubcopilot.com/mcp/ with token authentication
+  const isGitHub =
+    server?.service === 'github' ||
+    serverName.toLowerCase().includes('github') ||
+    serverIdentifier.toLowerCase().includes('github') ||
+    (server?.url && server.url.includes('github'))
+  if (isGitHub) {
+    return await executeGitHubTool(toolName, parameters, server?.authToken, server?.url)
   }
 
   // Determine MCP Endpoint URL

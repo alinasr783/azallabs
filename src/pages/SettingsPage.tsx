@@ -20,7 +20,7 @@ import {
   FileCode,
   Database,
 } from 'lucide-react'
-import { useMcp, type McpToolDefinition, VERCEL_MCP_TOOLS } from '../context/McpContext'
+import { useMcp, type McpToolDefinition, VERCEL_MCP_TOOLS, GITHUB_MCP_TOOLS } from '../context/McpContext'
 import { useAgentConfig } from '../context/AgentConfigContext'
 import { streamUnifiedLlmCompletion } from '../lib/llm/llmService'
 import {
@@ -45,6 +45,13 @@ import {
   isVercelConnected,
   testVercelConnection,
 } from '../lib/vercelConnector'
+import {
+  getGitHubToken,
+  setGitHubToken,
+  clearGitHubToken,
+  isGitHubConnected,
+  testGitHubConnection,
+} from '../lib/githubConnector'
 
 const GEMINI_MODELS = [
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', desc: 'Recommended, ultra-fast & responsive' },
@@ -515,6 +522,117 @@ export const SettingsPage: React.FC = () => {
       service: 'vercel',
       authToken: getVercelToken() || undefined,
       tools: VERCEL_MCP_TOOLS,
+      isEnabled: true,
+    })
+  }
+
+  // GitHub connection state
+  const [gitHubTokenInput, setGitHubTokenInput] = useState(getGitHubToken() || '')
+  const [gitHubStatusMsg, setGitHubStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [isTestingGitHub, setIsTestingGitHub] = useState(false)
+  const [isConnectingGitHub, setIsConnectingGitHub] = useState(false)
+  const [showGitHubTools, setShowGitHubTools] = useState(false)
+  const [gitHubCategoryFilter, setGitHubCategoryFilter] = useState<string>('all')
+
+  const isGitHubServerConnected =
+    isGitHubConnected() ||
+    servers.some(
+      (s) =>
+        s.service === 'github' ||
+        s.url.includes('github') ||
+        s.name.toLowerCase().includes('github')
+    )
+
+  const handleConnectGitHub = async () => {
+    setGitHubStatusMsg(null)
+    const token = gitHubTokenInput.trim()
+    if (!token) {
+      setGitHubStatusMsg({
+        type: 'error',
+        text: 'يرجى إدخال رمز الوصول الشخصي (GitHub Personal Access Token).',
+      })
+      return
+    }
+
+    setIsConnectingGitHub(true)
+    try {
+      setGitHubToken(token)
+      await connectServer({
+        name: 'GitHub MCP',
+        url: 'https://api.githubcopilot.com/mcp/',
+        service: 'github',
+        authToken: token,
+        tools: GITHUB_MCP_TOOLS,
+        isEnabled: true,
+      })
+
+      const testRes = await testGitHubConnection(token)
+      if (testRes.success && testRes.user) {
+        setGitHubStatusMsg({
+          type: 'success',
+          text: `تم ربط خادم GitHub MCP بنجاح ✔ تم التعرف على حساب: @${testRes.user.login} (${testRes.user.public_repos ?? 0} مستودع عام) وتفعيل 40+ أداة.`,
+        })
+      } else {
+        setGitHubStatusMsg({
+          type: 'success',
+          text: 'تم حفظ رمز GitHub وربط خادم GitHub MCP بنجاح مع 40+ أداة.',
+        })
+      }
+    } catch (err: any) {
+      setGitHubStatusMsg({ type: 'error', text: `فشل الربط: ${err.message}` })
+    } finally {
+      setIsConnectingGitHub(false)
+      setTimeout(() => setGitHubStatusMsg(null), 6000)
+    }
+  }
+
+  const handleDisconnectGitHub = async () => {
+    clearGitHubToken()
+    setGitHubTokenInput('')
+    const gServer = servers.find(
+      (s) =>
+        s.service === 'github' ||
+        s.url.includes('github') ||
+        s.name.toLowerCase().includes('github')
+    )
+    if (gServer) {
+      await disconnectServer(gServer.id)
+    }
+    setGitHubStatusMsg({
+      type: 'success',
+      text: 'تم قطع الاتصال بخادم GitHub MCP وإزالة بيانات الربط من المتصفح.',
+    })
+    setTimeout(() => setGitHubStatusMsg(null), 4000)
+  }
+
+  const handleTestGitHub = async () => {
+    setIsTestingGitHub(true)
+    setGitHubStatusMsg(null)
+    try {
+      const res = await testGitHubConnection(gitHubTokenInput.trim() || undefined)
+      if (res.success && res.user) {
+        setGitHubStatusMsg({
+          type: 'success',
+          text: `الاتصال بـ GitHub نشط وموثوق ✔ حساب: @${res.user.login} (${res.user.public_repos ?? 0} مستودع عام، ${res.user.total_private_repos ?? 0} خاص). كافة أدوات GitHub MCP جاهزة للاستخدام!`,
+        })
+      } else {
+        setGitHubStatusMsg({ type: 'error', text: res.error || 'فشل التحقق من رمز GitHub.' })
+      }
+    } catch (err: any) {
+      setGitHubStatusMsg({ type: 'error', text: `خطأ أثناء الفحص: ${err.message}` })
+    } finally {
+      setIsTestingGitHub(false)
+      setTimeout(() => setGitHubStatusMsg(null), 6000)
+    }
+  }
+
+  const handleAddGitHubPreset = async () => {
+    await connectServer({
+      name: 'GitHub MCP',
+      url: 'https://api.githubcopilot.com/mcp/',
+      service: 'github',
+      authToken: getGitHubToken() || undefined,
+      tools: GITHUB_MCP_TOOLS,
       isEnabled: true,
     })
   }
@@ -1887,6 +2005,294 @@ export const SettingsPage: React.FC = () => {
               </div>
             </section>
 
+            {/* GitHub MCP Integration Section */}
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-base font-semibold text-[#f3f3ee] flex items-center gap-2">
+                  <span>التكامل مع (GitHub) عبر خادم (MCP)</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1b1c24] text-[#9da0a8] border border-[#2c2e3a]">
+                    https://api.githubcopilot.com/mcp/
+                  </span>
+                </h2>
+                <p className="text-xs text-[#9da0a8] mt-1">
+                  ربط حسابك ومستودعاتك في GitHub مباشرة لاستعراض الأكواد، قراءة الملفات، إدارة المشاكل (Issues)، متابعة طلبات السحب (PRs)، وفحص الـ CI/CD.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl border border-[#262833] bg-[#14151a] shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold text-base shadow-xs">
+                      🐙
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#f3f3ee] flex items-center gap-2">
+                        <span>خادم (GitHub MCP)</span>
+                        <span
+                          className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${
+                            isGitHubServerConnected
+                              ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                              : 'bg-[#1e1f28] text-[#9da0a8] border border-[#2c2e3a]'
+                          }`}
+                        >
+                          {isGitHubServerConnected ? 'متصل ومتزامن' : 'جاهز للربط'}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-[#9da0a8] mt-0.5">
+                        رابط الخادم: <code>https://api.githubcopilot.com/mcp/</code> (40+ أداة متكاملة)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isGitHubServerConnected ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleTestGitHub}
+                          disabled={isTestingGitHub}
+                          className="px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-xs cursor-pointer"
+                        >
+                          {isTestingGitHub ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Server className="w-3.5 h-3.5" />
+                          )}
+                          <span>اختبار الاتصال</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDisconnectGitHub}
+                          className="px-3.5 py-1.5 rounded-full border border-red-900/40 text-red-400 hover:bg-red-950/30 text-xs font-medium transition-colors cursor-pointer"
+                        >
+                          قطع الاتصال
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleConnectGitHub}
+                        disabled={isConnectingGitHub || !gitHubTokenInput.trim()}
+                        className="px-4 py-2 rounded-full bg-[#cc785c] hover:bg-[#be684e] text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-40"
+                      >
+                        {isConnectingGitHub ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Link2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>حفظ والاتصال بـ GitHub MCP</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {gitHubStatusMsg && (
+                  <div
+                    className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                      gitHubStatusMsg.type === 'success'
+                        ? 'bg-emerald-950/40 border border-emerald-800 text-emerald-300'
+                        : 'bg-red-950/40 border border-red-800 text-red-300'
+                    }`}
+                  >
+                    {gitHubStatusMsg.type === 'success' ? (
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+                    )}
+                    <span>{gitHubStatusMsg.text}</span>
+                  </div>
+                )}
+
+                {/* Token Input Section */}
+                <div className="p-3.5 rounded-xl bg-[#0d0e11] border border-[#2c2e3a] space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-[#9da0a8]">
+                    <span>رمز الوصول الشخصي (GitHub Personal Access Token - Classic أو Fine-grained):</span>
+                    <a
+                      href="https://github.com/settings/tokens/new?scopes=repo,read:org,read:user,workflow"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#cc785c] hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <span>إنشاء رمز جديد من إعدادات GitHub (مع صلاحيات repo, workflow, read:org)</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={gitHubTokenInput}
+                      onChange={(e) => setGitHubTokenInput(e.target.value)}
+                      placeholder="ghp_... أو الصق رمز الوصول الخاص بك هنا"
+                      className="flex-1 px-3.5 py-2 rounded-xl border border-[#2c2e3a] bg-[#14151a] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none font-mono"
+                    />
+                    {!isGitHubServerConnected && (
+                      <button
+                        type="button"
+                        onClick={handleConnectGitHub}
+                        disabled={isConnectingGitHub || !gitHubTokenInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                      >
+                        {isConnectingGitHub ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        <span>ربط</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Interactive Tools Explorer */}
+                <div className="border-t border-[#262833] pt-3">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setShowGitHubTools(!showGitHubTools)}
+                      className="text-xs text-[#cc785c] hover:text-[#f3f3ee] transition-colors flex items-center gap-1.5 font-medium cursor-pointer"
+                    >
+                      <span>{showGitHubTools ? 'إخفاء مستعرض الأدوات' : `استعراض أدوات GitHub MCP المتوفرة (${GITHUB_MCP_TOOLS.length} أداة)`}</span>
+                      {showGitHubTools ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                    <span className="text-[11px] text-[#6b6e79]">
+                      بروتوكول MCP قياسي عبر HTTPS
+                    </span>
+                  </div>
+
+                  {showGitHubTools && (
+                    <div className="mt-3 space-y-3">
+                      {/* Filter Chips */}
+                      <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        {[
+                          { id: 'all', label: 'الكل (40+)' },
+                          { id: 'repos', label: 'المستودعات والملفات' },
+                          { id: 'issues', label: 'المشاكل (Issues)' },
+                          { id: 'pulls', label: 'طلبات السحب (PRs)' },
+                          { id: 'actions', label: 'العمليات (Actions)' },
+                          { id: 'security', label: 'الأمان والتنبيهات' },
+                          { id: 'community', label: 'المجتمع والنجوم' },
+                          { id: 'context', label: 'السياق والتوثيق' },
+                        ].map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setGitHubCategoryFilter(cat.id)}
+                            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                              gitHubCategoryFilter === cat.id
+                                ? 'bg-[#cc785c] text-white font-medium'
+                                : 'bg-[#1b1c24] text-[#9da0a8] hover:text-[#f3f3ee]'
+                            }`}
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Filtered Tools Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
+                        {GITHUB_MCP_TOOLS.filter((tool) => {
+                          if (gitHubCategoryFilter === 'repos')
+                            return [
+                              'search_repositories',
+                              'get_file_contents',
+                              'create_or_update_file',
+                              'delete_file',
+                              'push_files',
+                              'list_commits',
+                              'get_commit',
+                              'list_branches',
+                              'create_branch',
+                              'create_repository',
+                              'fork_repository',
+                              'list_releases',
+                              'get_latest_release',
+                              'list_tags',
+                              'search_code',
+                              'search_commits',
+                              'get_repository_tree',
+                              'list_repository_collaborators',
+                            ].includes(tool.name)
+                          if (gitHubCategoryFilter === 'issues')
+                            return [
+                              'list_issues',
+                              'issue_read',
+                              'issue_write',
+                              'add_issue_comment',
+                              'search_issues',
+                              'list_label',
+                              'label_write',
+                            ].includes(tool.name)
+                          if (gitHubCategoryFilter === 'pulls')
+                            return [
+                              'list_pull_requests',
+                              'pull_request_read',
+                              'create_pull_request',
+                              'update_pull_request',
+                              'merge_pull_request',
+                              'search_pull_requests',
+                              'add_reply_to_pull_request_comment',
+                            ].includes(tool.name)
+                          if (gitHubCategoryFilter === 'actions')
+                            return [
+                              'actions_list',
+                              'actions_get',
+                              'get_job_logs',
+                              'actions_run_trigger',
+                            ].includes(tool.name)
+                          if (gitHubCategoryFilter === 'security')
+                            return [
+                              'list_code_scanning_alerts',
+                              'list_dependabot_alerts',
+                              'list_secret_scanning_alerts',
+                            ].includes(tool.name)
+                          if (gitHubCategoryFilter === 'community')
+                            return [
+                              'list_discussions',
+                              'get_discussion',
+                              'list_gists',
+                              'get_gist',
+                              'create_gist',
+                              'list_starred_repositories',
+                              'star_repository',
+                              'list_notifications',
+                            ].includes(tool.name)
+                          if (gitHubCategoryFilter === 'context')
+                            return [
+                              'get_me',
+                              'get_teams',
+                              'search_users',
+                              'search_orgs',
+                              'github_support_docs_search',
+                            ].includes(tool.name)
+                          return true
+                        }).map((tool) => (
+                          <div
+                            key={tool.name}
+                            className="p-2.5 rounded-xl border border-[#22242c] bg-[#101115] hover:border-[#cc785c]/40 transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="font-mono text-xs font-semibold text-[#f3f3ee]">
+                                {tool.name}
+                              </span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1b1c24] text-[#6b6e79]">
+                                أداة
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#9da0a8] leading-relaxed">
+                              {tool.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#16171d] border border-[#262833] text-[10px] text-[#9da0a8] leading-relaxed space-y-1">
+                  <p className="font-semibold text-[#f3f3ee]">💡 كيف تستخدم GitHub MCP عبر المحادثة:</p>
+                  <p>
+                    بمجرد الربط، يمكنك توجيه الأسئلة والأوامر للوكيل مباشرة، مثل: «اعرض لي قائمة مستودعاتي في GitHub»، «هل توجد مشاكل (Issues) مفتوحة؟»، «ما هي آخر طلبات السحب (Pull Requests)؟»، «ابعتلي آخر الكوميتس لفرع main»، «اقرأ لي ملف README.md»، أو «ابحث في توثيق GitHub عن إعداد Actions».
+                  </p>
+                </div>
+              </div>
+            </section>
+
             {/* Connected MCP Servers List */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
@@ -1900,6 +2306,17 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {!servers.some((s) => s.name.toLowerCase().includes('github') || s.service === 'github') && (
+                    <button
+                      type="button"
+                      onClick={handleAddGitHubPreset}
+                      className="px-3 py-1.5 rounded-full border border-purple-500/30 text-purple-300 hover:bg-purple-950/20 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة خادم (GitHub MCP)</span>
+                    </button>
+                  )}
+
                   {!servers.some((s) => s.name.toLowerCase().includes('vercel') || s.service === 'vercel') && (
                     <button
                       type="button"

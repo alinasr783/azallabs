@@ -10,10 +10,12 @@ import { useMcp } from '../context/McpContext'
 import { useProjects } from '../context/ProjectContext'
 import { getTickTickToken, fetchTickTickProjects, fetchTasksByProjectName, createTickTickTask, updateTickTickTask } from '../lib/ticktick'
 import { getVercelToken, isVercelConnected } from '../lib/vercelConnector'
+import { getGitHubToken } from '../lib/githubConnector'
 import { isComplexTask } from '../lib/orchestrator'
 import { runMultiAgentWorkflow } from '../lib/multiAgentOrchestrator'
 import { runTickTickIntent } from '../lib/ticktickIntent'
 import { runVercelIntent } from '../lib/vercelIntent'
+import { runGitHubIntent } from '../lib/githubIntent'
 import { streamUnifiedLlmCompletion } from '../lib/llm/llmService'
 import { buildAgentContext } from '../lib/contextEngine'
 import { parseMemoryBlockFromText, updateMemoryItem } from '../lib/memory'
@@ -445,9 +447,86 @@ export const ChatPage: React.FC = () => {
       return
     }
 
-    // 2. TickTick MCP Intent Detection
+    const wasLastMsgGitHub =
+      lastMsgContent.includes('GitHub') ||
+      lastMsgContent.includes('جيتهاب') ||
+      lastMsgContent.includes('جيت هاب') ||
+      lastMsgContent.includes('المستودعات') ||
+      lastMsgContent.includes('مستودعاتك')
+
+    // 2. GitHub MCP Intent Detection
+    const isGitHubIntent =
+      !isVercelIntent &&
+      (content.toLowerCase().includes('github') ||
+        content.includes('جيتهاب') ||
+        content.includes('جيت هاب') ||
+        (wasLastMsgGitHub &&
+          (content.includes('مستودع') ||
+            content.includes('مستودعات') ||
+            content.includes('مشاكل') ||
+            content.includes('issues') ||
+            content.includes('pull') ||
+            content.includes('سحب') ||
+            content.includes('commits') ||
+            content.includes('كوميت') ||
+            content.includes('فروع') ||
+            content.includes('ملف'))))
+
+    if (isGitHubIntent) {
+      const ghToken = getGitHubToken()
+      const ghServer = servers.find(
+        (s) => s.service === 'github' || s.url.includes('github') || s.name.toLowerCase().includes('github')
+      )
+      const effectiveGitHubToken = ghToken || ghServer?.authToken
+
+      if (!effectiveGitHubToken) {
+        setAsstContent(
+          '⚠️ **خادم GitHub MCP غير مربوط حالياً.**\n\nللربط المباشر مع خادم `https://api.githubcopilot.com/mcp/` واستعراض المستودعات والأكواد والـ Issues والـ Pull Requests وسجلات الـ Commits، يرجى إدخال رمز الوصول الشخصي (GitHub Personal Access Token) عبر البطاقة التالية أو من [صفحة الإعدادات](/settings?tab=mcp):\n\n:::mcp-connect\n{"name": "GitHub MCP", "url": "https://api.githubcopilot.com/mcp/", "service": "github"}\n:::\n',
+          true
+        )
+        setIsLoading(false)
+        return
+      }
+
+      updateMessagePlan(activeId, asstMsgId, () => ({
+        title: `طلب GitHub: ${content.slice(0, 26)}${content.length > 26 ? '…' : ''}`,
+        items: [
+          {
+            id: 'gh_1',
+            title: 'استدعاء أداة GitHub MCP وجلب البيانات الحقيقية المؤكدة',
+            status: 'in_progress' as const,
+          },
+        ],
+      }))
+
+      try {
+        const ans = await runGitHubIntent(content, effectiveGitHubToken, servers, llmConfig, systemPrompt, existingMsgs)
+        setAsstContent(ans, true)
+        updateMessagePlan(activeId, asstMsgId, (prev) =>
+          prev
+            ? {
+                ...prev,
+                items: [
+                  {
+                    id: 'gh_1',
+                    title: 'تم استدعاء أداة GitHub MCP وجلب النتيجة المعتمدة',
+                    status: 'completed' as const,
+                  },
+                ],
+              }
+            : prev
+        )
+      } catch (e: any) {
+        setAsstContent(`تعذر تنفيذ طلب GitHub: ${e?.message || e}`, true)
+      }
+      setIsLoading(false)
+      return
+    }
+
+    // 3. TickTick MCP Intent Detection
     const isTickTickIntent =
       !isVercelIntent &&
+      !isGitHubIntent &&
       (content.toLowerCase().includes('tick') ||
         content.includes('تيك') ||
         content.includes('حطلي مهمة') ||
@@ -532,7 +611,7 @@ export const ChatPage: React.FC = () => {
       return
     }
 
-    if (isComplexTask(content) && !isTickTickIntent && !isVercelIntent) {
+    if (isComplexTask(content) && !isTickTickIntent && !isVercelIntent && !isGitHubIntent) {
       try {
         let realTasksText = ''
         if (tickTickToken) {

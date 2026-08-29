@@ -4,6 +4,7 @@ import { discoverMcpToolsFromUrl } from '../lib/mcpClient'
 import { clearTickTickToken, getTickTickToken } from '../lib/ticktick'
 import { clearSupabaseConnection } from '../lib/supabaseConnector'
 import { clearVercelToken, getVercelToken } from '../lib/vercelConnector'
+import { clearGitHubToken, getGitHubToken } from '../lib/githubConnector'
 
 export interface McpToolDefinition {
   name: string
@@ -333,12 +334,300 @@ export const VERCEL_MCP_TOOLS: McpToolDefinition[] = [
   },
 ]
 
+// =========================================================================
+// Official GitHub MCP Server Tools (40+ Tools)
+// https://api.githubcopilot.com/mcp/
+// =========================================================================
+export const GITHUB_MCP_TOOLS: McpToolDefinition[] = [
+  // 1. Repositories
+  {
+    name: 'search_repositories',
+    description:
+      'البحث في مستودعات GitHub وفق معايير بحث متقدمة (اسم، لغة، نجوم، مالك). المدخلات: query (إلزامي)، sort، order، perPage، page.',
+  },
+  {
+    name: 'get_file_contents',
+    description:
+      'قراءة محتويات ملف أو مجلد داخل مستودع معين. المدخلات: owner (إلزامي)، repo (إلزامي)، path (مسار الملف أو المجلد)، ref (الفرع أو التاج أو الـ SHA).',
+  },
+  {
+    name: 'create_or_update_file',
+    description:
+      'إنشاء أو تحديث ملف داخل مستودع على GitHub وعمل Commit له. المدخلات: owner (إلزامي)، repo (إلزامي)، path (إلزامي)، content (إلزامي)، message (رسالة الـ Commit، إلزامي)، branch (إلزامي)، sha (مطلوب عند التحديث).',
+  },
+  {
+    name: 'delete_file',
+    description:
+      'حذف ملف من مستودع GitHub. المدخلات: owner (إلزامي)، repo (إلزامي)، path (إلزامي)، message (إلزامي)، branch (إلزامي).',
+  },
+  {
+    name: 'push_files',
+    description:
+      'دفع وتحديث عدة ملفات معاً في Commit واحد داخل مستودع GitHub. المدخلات: owner (إلزامي)، repo (إلزامي)، branch (إلزامي)، message (إلزامي)، files (مصفوفة كائنات path و content، إلزامي).',
+  },
+  {
+    name: 'list_commits',
+    description:
+      'استعراض سجل الـ Commits في مستودع GitHub. المدخلات: owner (إلزامي)، repo (إلزامي)، sha، path، author، since، until، perPage، page.',
+  },
+  {
+    name: 'get_commit',
+    description:
+      'جلب تفاصيل Commit محدد مع الفروقات (Diff) وتغييرات الأسطر. المدخلات: owner (إلزامي)، repo (إلزامي)، sha (إلزامي)، detail (none, stats, full_patch).',
+  },
+  {
+    name: 'list_branches',
+    description:
+      'استعراض الفروع (Branches) في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، perPage، page.',
+  },
+  {
+    name: 'create_branch',
+    description:
+      'إنشاء فرع (Branch) جديد في المستودع انطلاقاً من فرع أساسي. المدخلات: owner (إلزامي)، repo (إلزامي)، branch (إلزامي)، from_branch.',
+  },
+  {
+    name: 'create_repository',
+    description:
+      'إنشاء مستودع جديد على حسابك في GitHub أو داخل منظمة. المدخلات: name (إلزامي)، description، private (افتراضي true)، autoInit.',
+  },
+  {
+    name: 'fork_repository',
+    description:
+      'عمل Fork لمستودع إلى حسابك الشخصي أو منظمة. المدخلات: owner (إلزامي)، repo (إلزامي)، organization.',
+  },
+  {
+    name: 'list_releases',
+    description:
+      'استعراض الإصدارات (Releases) في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، perPage، page.',
+  },
+  {
+    name: 'get_latest_release',
+    description:
+      'جلب أحدث إصدار رسمي منشور في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي).',
+  },
+  {
+    name: 'list_tags',
+    description:
+      'استعراض وسوم (Tags) المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، perPage، page.',
+  },
+  {
+    name: 'search_code',
+    description:
+      'البحث في الأكواد والملفات البرمجية عبر مستودعات GitHub. المدخلات: query (إلزامي)، sort، order، perPage، page.',
+  },
+  {
+    name: 'search_commits',
+    description:
+      'البحث في رسائل وسجلات الـ Commits. المدخلات: query (إلزامي)، sort، order، perPage، page.',
+  },
+  {
+    name: 'list_repository_collaborators',
+    description:
+      'استعراض المساهمين وأعضاء الفريق في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، affiliation.',
+  },
+
+  // 2. Issues
+  {
+    name: 'list_issues',
+    description:
+      'استعراض المشاكل والمهام (Issues) في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، state (open, closed, all)، labels، orderBy، direction، perPage، since.',
+  },
+  {
+    name: 'issue_read',
+    description:
+      'قراءة تفاصيل Issue محدد أو تعليقاته أو تسمياته. المدخلات: owner (إلزامي)، repo (إلزامي)، issue_number (إلزامي)، method (get, get_comments, get_labels, get_sub_issues).',
+  },
+  {
+    name: 'issue_write',
+    description:
+      'إنشاء أو تعديل Issue في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، method (create, update، إلزامي)، title، body، state، labels، assignees، issue_number.',
+  },
+  {
+    name: 'add_issue_comment',
+    description:
+      'إضافة تعليق على Issue أو Pull Request. المدخلات: owner (إلزامي)، repo (إلزامي)، issue_number (إلزامي)، body (إلزامي).',
+  },
+  {
+    name: 'search_issues',
+    description:
+      'البحث في الـ Issues والـ PRs بلغة طبيعية وفلاتر متقدمة. المدخلات: query (إلزامي)، owner، repo، sort، order، perPage، page.',
+  },
+  {
+    name: 'list_label',
+    description:
+      'استعراض التسميات (Labels) المتاحة في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي).',
+  },
+  {
+    name: 'label_write',
+    description:
+      'إنشاء أو تعديل أو حذف Label. المدخلات: owner (إلزامي)، repo (إلزامي)، method (create, update, delete)، name (إلزامي)، color، description.',
+  },
+
+  // 3. Pull Requests
+  {
+    name: 'list_pull_requests',
+    description:
+      'استعراض طلبات السحب (Pull Requests) في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، state (open, closed, all)، head، base، sort، direction، perPage.',
+  },
+  {
+    name: 'pull_request_read',
+    description:
+      'جلب تفاصيل Pull Request كاملة، الفروقات (get_diff)، الملفات المعدلة (get_files)، الكوميتس (get_commits)، المراجعات (get_reviews)، والتعليقات. المدخلات: owner (إلزامي)، repo (إلزامي)، pullNumber (إلزامي)، method (get, get_diff, get_files, get_commits, get_reviews, get_comments, get_check_runs).',
+  },
+  {
+    name: 'create_pull_request',
+    description:
+      'فتح Pull Request جديد. المدخلات: owner (إلزامي)، repo (إلزامي)، title (إلزامي)، head (فرع التغييرات، إلزامي)، base (الفرع المستهدف للدمج، إلزامي)، body، draft.',
+  },
+  {
+    name: 'update_pull_request',
+    description:
+      'تعديل بيانات Pull Request (العنوان، الوصف، الحالة، الفرع الأساسي). المدخلات: owner (إلزامي)، repo (إلزامي)، pullNumber (إلزامي)، title، body، state، base.',
+  },
+  {
+    name: 'merge_pull_request',
+    description:
+      'دمج Pull Request (Merge). المدخلات: owner (إلزامي)، repo (إلزامي)، pullNumber (إلزامي)، commit_title، commit_message، merge_method (merge, squash, rebase).',
+  },
+  {
+    name: 'search_pull_requests',
+    description:
+      'البحث في طلبات السحب عبر GitHub. المدخلات: query (إلزامي)، owner، repo، sort، order، perPage.',
+  },
+  {
+    name: 'add_reply_to_pull_request_comment',
+    description:
+      'الرد على تعليق مراجعة كود داخل Pull Request. المدخلات: owner (إلزامي)، repo (إلزامي)، commentId (إلزامي)، body (إلزامي)، pullNumber.',
+  },
+
+  // 4. Actions & CI/CD
+  {
+    name: 'actions_list',
+    description:
+      'استعراض ملفات ودورات تشغيل سير العمل (Workflows / Runs) في GitHub Actions. المدخلات: owner (إلزامي)، repo (إلزامي)، method (list_workflows, list_workflow_runs, list_workflow_jobs)، resource_id، per_page، page.',
+  },
+  {
+    name: 'actions_get',
+    description:
+      'جلب تفاصيل دورة تشغيل محددة أو وظيفة أو ملف سير عمل. المدخلات: owner (إلزامي)، repo (إلزامي)، method (get_workflow, get_workflow_run, get_workflow_job)، resource_id (إلزامي).',
+  },
+  {
+    name: 'get_job_logs',
+    description:
+      'جلب سجلات تشغيل وظيفة (Job Logs) في GitHub Actions وتحليل أسباب فشل البناء. المدخلات: owner (إلزامي)، repo (إلزامي)، job_id، run_id، failed_only، return_content (افتراضي true).',
+  },
+  {
+    name: 'actions_run_trigger',
+    description:
+      'إطلاق وتشغيل Workflow يدوياً (workflow_dispatch). المدخلات: owner (إلزامي)، repo (إلزامي)، method (run_workflow)، workflow_id (إلزامي)، ref (إلزامي)، inputs.',
+  },
+
+  // 5. Git & Structure
+  {
+    name: 'get_repository_tree',
+    description:
+      'جلب الشجرة الكاملة للملفات والمجلدات في المستودع (Tree) بصيغة هيكلية متسلسلة. المدخلات: owner (إلزامي)، repo (إلزامي)، tree_sha، recursive (افتراضي true)، path_filter.',
+  },
+
+  // 6. Context & Users
+  {
+    name: 'get_me',
+    description:
+      'جلب الملف الشخصي والبيانات الخاصة بالحساب المسجل على GitHub (الاسم، المعرف، عدد المستودعات). لا يتطلب مدخلات.',
+  },
+  {
+    name: 'get_teams',
+    description:
+      'استعراض الفرق التابع لها المستخدم أو المنظمة. المدخلات: user.',
+  },
+  {
+    name: 'search_users',
+    description:
+      'البحث عن مستخدمين ومطورين في GitHub. المدخلات: query (إلزامي)، sort، order، perPage، page.',
+  },
+  {
+    name: 'search_orgs',
+    description:
+      'البحث عن منظمات وشركات في GitHub. المدخلات: query (إلزامي)، sort، order، perPage، page.',
+  },
+
+  // 7. Gists & Discussions
+  {
+    name: 'list_gists',
+    description:
+      'استعراض مقتطفات الأكواد (Gists) الخاصة بالمستخدم. المدخلات: username، since، perPage، page.',
+  },
+  {
+    name: 'get_gist',
+    description:
+      'جلب محتوى مقتطف كود (Gist) محدد. المدخلات: gist_id (إلزامي).',
+  },
+  {
+    name: 'create_gist',
+    description:
+      'إنشاء مقتطف كود (Gist) جديد. المدخلات: filename (إلزامي)، content (إلزامي)، description، public.',
+  },
+  {
+    name: 'list_discussions',
+    description:
+      'استعراض نقاشات المجتمع (Discussions) في المستودع. المدخلات: owner (إلزامي)، repo، category، perPage.',
+  },
+  {
+    name: 'get_discussion',
+    description:
+      'جلب تفاصيل نقاش محدد في المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، discussionNumber (إلزامي).',
+  },
+
+  // 8. Security & Alerts
+  {
+    name: 'list_code_scanning_alerts',
+    description:
+      'استعراض تنبيهات فحص الكود الأمنية (Code Scanning Alerts) واكتشاف الثغرات. المدخلات: owner (إلزامي)، repo (إلزامي)، severity، state.',
+  },
+  {
+    name: 'list_dependabot_alerts',
+    description:
+      'استعراض تنبيهات Dependabot لتحديث الحزم والمكتبات المعطوبة أمنياً. المدخلات: owner (إلزامي)، repo (إلزامي)، severity، state.',
+  },
+  {
+    name: 'list_secret_scanning_alerts',
+    description:
+      'استعراض تنبيهات تسريب المفاتيح والأسرار (Secret Scanning) داخل المستودع. المدخلات: owner (إلزامي)، repo (إلزامي)، state.',
+  },
+
+  // 9. Stargazers & Notifications
+  {
+    name: 'list_starred_repositories',
+    description:
+      'استعراض المستودعات المفضلة (Starred Repositories). المدخلات: username، sort، direction، perPage، page.',
+  },
+  {
+    name: 'star_repository',
+    description:
+      'وضع نجمة (Star) على مستودع معين. المدخلات: owner (إلزامي)، repo (إلزامي).',
+  },
+  {
+    name: 'list_notifications',
+    description:
+      'استعراض إشعارات وتنبيهات الحساب في GitHub. المدخلات: all، participating، since، before.',
+  },
+
+  // 10. Support Docs
+  {
+    name: 'github_support_docs_search',
+    description:
+      'البحث في وثائق ودليل دعم GitHub الرسمي للإجابة على الأسئلة البرمجية والتقنية. المدخلات: query (إلزامي).',
+  },
+]
+
 // Default rich tool definitions for known services
 export const DEFAULT_TOOLS_BY_SERVICE: Record<string, McpToolDefinition[]> = {
   ticktick: TICKTICK_MCP_TOOLS,
   supabase: SUPABASE_MCP_TOOLS,
   vercel: VERCEL_MCP_TOOLS,
   'Vercel MCP': VERCEL_MCP_TOOLS,
+  github: GITHUB_MCP_TOOLS,
+  'GitHub MCP': GITHUB_MCP_TOOLS,
   '800 Academy': [
     { name: 'update_package', description: 'تعديل بيانات وسعر وحالة وصلاحية باقات واشتراكات المواد في نظام 800 Academy وإرسال التغييرات مباشرة للخادم' },
     { name: 'create_package', description: 'إنشاء وإضافة باقة أو اشتراك جديد لمادة في نظام 800 Academy وإرسالها مباشرة للخادم' },
@@ -348,11 +637,6 @@ export const DEFAULT_TOOLS_BY_SERVICE: Record<string, McpToolDefinition[]> = {
     { name: 'filter_questions', description: 'البحث والتصفية في بنك الأسئلة المركزي الموحد (النوع، الصعوبة، نص السؤال)' },
     { name: 'list_units', description: 'استعراض الوحدات الدراسية والمناهج (Heart of Algebra, Passport to Advanced Math)' },
     { name: 'get_system_status', description: 'فحص وتشخيص شامل لحالة المنصة وقاعدة البيانات وسرعة الاستجابة' },
-  ],
-  github: [
-    { name: 'github_create_issue', description: 'إنشاء Issue جديد في مستودع محدد' },
-    { name: 'github_list_repos', description: 'استعراض المستودعات الخاصة بك' },
-    { name: 'github_create_pull_request', description: 'إنشاء طلب سحب (Pull Request) جديد' },
   ],
   notion: [
     { name: 'notion_create_page', description: 'إنشاء صفحة جديدة في مساحة عمل Notion' },
@@ -416,6 +700,18 @@ export const VERCEL_SERVER: McpServer = {
   isEnabled: true,
   connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
   tools: VERCEL_MCP_TOOLS,
+}
+
+// GitHub is surfaced as a connected MCP server directly via https://api.githubcopilot.com/mcp/
+export const GITHUB_SERVER: McpServer = {
+  id: 'mcp_github',
+  name: 'GitHub MCP',
+  url: 'https://api.githubcopilot.com/mcp/',
+  service: 'github',
+  status: 'connected',
+  isEnabled: true,
+  connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+  tools: GITHUB_MCP_TOOLS,
 }
 
 function normalizeTools(rawTools: (string | McpToolDefinition)[] = []): McpToolDefinition[] {
@@ -508,6 +804,35 @@ export const McpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           isEnabled: true,
           authToken: savedTickToken,
           tools: TICKTICK_MCP_TOOLS,
+          connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        })
+      }
+    }
+
+    // Ensure GitHub MCP is registered if token exists in localStorage
+    const savedGitHubToken = getGitHubToken()
+    if (savedGitHubToken) {
+      const gIdx = currentServers.findIndex(
+        (s) => s.service === 'github' || s.url.includes('github') || s.name.toLowerCase().includes('github')
+      )
+      if (gIdx >= 0) {
+        currentServers[gIdx] = {
+          ...currentServers[gIdx],
+          status: 'connected',
+          isEnabled: true,
+          authToken: savedGitHubToken,
+          tools: currentServers[gIdx].tools?.length ? currentServers[gIdx].tools : GITHUB_MCP_TOOLS,
+        }
+      } else {
+        currentServers.push({
+          id: 'mcp_github',
+          name: 'GitHub MCP',
+          url: 'https://api.githubcopilot.com/mcp/',
+          service: 'github',
+          status: 'connected',
+          isEnabled: true,
+          authToken: savedGitHubToken,
+          tools: GITHUB_MCP_TOOLS,
           connectedAt: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
         })
       }
@@ -679,6 +1004,11 @@ export const McpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // If removing Vercel server, also clear token
     if (id === 'mcp_vercel' || target?.service === 'vercel' || target?.name.toLowerCase().includes('vercel') || target?.url.includes('vercel')) {
       clearVercelToken()
+    }
+
+    // If removing GitHub server, also clear token
+    if (id === 'mcp_github' || target?.service === 'github' || target?.name.toLowerCase().includes('github') || target?.url.includes('github')) {
+      clearGitHubToken()
     }
 
     const updated = servers.filter((s) => s.id !== id)
