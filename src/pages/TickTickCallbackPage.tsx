@@ -68,7 +68,7 @@ export const TickTickCallbackPage: React.FC = () => {
   }, [searchParams, connectServer, navigate])
 
   return (
-    <div className="min-h-screen w-full bg-[#0d0e11] flex flex-col justify-center items-center p-4 text-[#f3f3ee] font-serif" dir="rtl">
+    <div className="min-h-screen w-full bg-[#0d0e11] flex flex-col justify-center items-center p-4 text-[#f3f3ee]" dir="rtl">
       <div className="w-full max-w-md bg-[#14151a] border border-[#262833] rounded-3xl p-8 shadow-xl text-center">
         {/* Pure text header */}
         <h1 className="text-xl font-semibold tracking-tight text-[#cc785c] mb-4">

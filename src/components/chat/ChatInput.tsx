@@ -40,7 +40,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 pb-3">
+    <div className="w-full max-w-3xl mx-auto px-3 pb-3 pt-[env(safe-area-inset-bottom)]">
       {/* ╭─ Terminal Input Frame ─────────────────────────────────╮ */}
       <div className="relative border border-[#2c2e3a] rounded-lg bg-[#14151a] focus-within:border-[#cc785c]/60 transition-colors">
         {/* Frame Title */}
@@ -75,7 +75,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
       {/* ╰─────────────────────────────────────────────────────────╯ */}
 
       {/* Keyboard Hints & Shortcuts */}
-      <div className="flex items-center justify-between px-1 pt-2 text-[11px] text-[#4a4d58] select-none">
+      <div className="hidden sm:flex items-center justify-between px-1 pt-2 text-[11px] text-[#4a4d58] select-none">
         <div className="flex items-center gap-3">
           <span>? مساعدة</span>
           <span>/ أوامر</span>
@@ -84,7 +84,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
         <div className="flex items-center gap-2">
           {[
             { label: '/خطة عمل', cmd: '/خطة عمل برمجية شاملة ' },
-            { label: 'فحص', cmd: 'افحص وراجع هذه الشيفرة بدقة: ' },
+            { label: 'فحص', cmd: 'افحص راجع هذه الشيفرة بدقة: ' },
             { label: 'مهام', cmd: 'أنشئ قائمة مهام تفاعلية خطوة بخطوة لـ ' },
           ].map((s) => (
             <button

@@ -429,7 +429,7 @@ export const SettingsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0e11] text-[#f3f3ee] font-serif" dir="rtl">
+    <div className="min-h-screen bg-[#0d0e11] text-[#f3f3ee]" dir="rtl">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-[#131418]/90 backdrop-blur-md border-b border-[#22242c] px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -1095,7 +1095,7 @@ export const SettingsPage: React.FC = () => {
                     value={promptTestInput}
                     onChange={(e) => setPromptTestInput(e.target.value)}
                     placeholder="اكتب استفساراً لاختبار استجابة الوكيل وسلوكه مع هذا التوجيه..."
-                    className="w-full pr-7 pl-3 py-2 rounded-xl bg-[#0f1014] border border-[#2c2e3a] text-xs text-[#f3f3ee] placeholder-[#6b6e79] focus:outline-none focus:border-[#cc785c] transition-colors font-serif"
+                    className="w-full pr-7 pl-3 py-2 rounded-xl bg-[#0f1014] border border-[#2c2e3a] text-xs text-[#f3f3ee] placeholder-[#6b6e79] focus:outline-none focus:border-[#cc785c] transition-colors"
                   />
                 </div>
 
@@ -1383,7 +1383,7 @@ export const SettingsPage: React.FC = () => {
                       value={supabaseUrl}
                       onChange={(e) => setSupabaseUrl(e.target.value)}
                       placeholder="https://abcdefg.supabase.co"
-                      className="w-full px-3.5 py-2 rounded-xl border border-[#2c2e3a] bg-[#0d0e11] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none font-serif"
+                      className="w-full px-3.5 py-2 rounded-xl border border-[#2c2e3a] bg-[#0d0e11] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none"
                     />
                   </div>
 
@@ -1659,7 +1659,7 @@ export const SettingsPage: React.FC = () => {
                         value={customName}
                         onChange={(e) => setCustomName(e.target.value)}
                         placeholder="مثال: Analytics MCP"
-                        className="w-full px-3.5 py-2 rounded-xl border border-[#2c2e3a] bg-[#0d0e11] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none font-serif"
+                        className="w-full px-3.5 py-2 rounded-xl border border-[#2c2e3a] bg-[#0d0e11] text-xs text-[#f3f3ee] focus:border-[#cc785c] focus:outline-none"
                       />
                     </div>
 

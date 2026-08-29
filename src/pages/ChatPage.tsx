@@ -115,7 +115,9 @@ export const ChatPage: React.FC = () => {
   const { servers, connectServer } = useMcp()
   const [tasks, setTasks] = useState<TaskSession[]>([])
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  )
   const [isLoading, setIsLoading] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -129,19 +131,23 @@ export const ChatPage: React.FC = () => {
     updater: (prev: ClaudeTodoList | null) => ClaudeTodoList | null
   ) => {
     if (!taskId) return
-    setTasks((prev) =>
-      prev.map((t) => {
+    setTasks((prev) => {
+      const next = prev.map((t) => {
         if (t.id !== taskId) return t
         return {
           ...t,
           messages: t.messages.map((m) => {
             if (m.id !== msgId) return m
-            const next = updater(m.plan ?? null)
-            return { ...m, plan: next ?? undefined }
+            const updatedPlan = updater(m.plan ?? null)
+            return { ...m, plan: updatedPlan ?? undefined }
           }),
         }
       })
-    )
+      try {
+        localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(next))
+      } catch {}
+      return next
+    })
   }
 
   useEffect(() => {
@@ -182,6 +188,7 @@ export const ChatPage: React.FC = () => {
     const updated = [newTask, ...tasks]
     saveTasks(updated)
     setCurrentTaskId(newTask.id)
+    if (window.innerWidth < 768) setSidebarOpen(false)
   }
 
   const handleDeleteTask = (id: string) => {
@@ -1490,6 +1497,7 @@ ${universalMcpContext}
         currentTaskId={currentTaskId}
         onSelectTask={(id) => {
           setCurrentTaskId(id)
+          if (window.innerWidth < 768) setSidebarOpen(false)
         }}
         onNewTask={handleNewTask}
         onDeleteTask={handleDeleteTask}

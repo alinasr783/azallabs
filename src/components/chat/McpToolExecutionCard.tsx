@@ -114,7 +114,7 @@ export const McpToolExecutionCard: React.FC<McpToolExecutionCardProps> = ({ serv
   }
 
   return (
-    <div className="my-2.5 p-3.5 rounded-xl border border-[#262833] bg-[#14151a] shadow-xs text-right max-w-xl font-serif">
+    <div className="my-2.5 p-3.5 rounded-xl border border-[#262833] bg-[#14151a] shadow-xs text-right max-w-xl">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           <Wrench className="w-4 h-4 text-[#cc785c]" />

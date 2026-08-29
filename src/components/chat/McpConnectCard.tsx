@@ -77,7 +77,7 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
 
   return (
     <>
-      <div className="my-3 p-4 rounded-2xl border border-[#262833] bg-[#14151a] shadow-xs text-right max-w-xl font-serif" dir="rtl">
+      <div className="my-3 p-4 rounded-2xl border border-[#262833] bg-[#14151a] shadow-xs text-right max-w-xl" dir="rtl">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ export const McpConnectCard: React.FC<McpConnectCardProps> = ({ name, url, servi
 
       {/* Generic Modal for other non-TickTick servers */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 font-serif" dir="rtl">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
           <div className="w-full max-w-md bg-[#16171d] border border-[#262833] rounded-3xl p-6 shadow-xl text-right">
             <div className="flex items-center gap-2.5 mb-4">
               <div className="w-9 h-9 rounded-full bg-[#cc785c]/10 flex items-center justify-center text-[#cc785c]">

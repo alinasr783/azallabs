@@ -18,7 +18,7 @@ export const MaestroTodoListCard: React.FC<MaestroTodoListCardProps> = ({ plan }
   }
 
   return (
-    <div className="my-3 rounded-2xl border border-[#262833] bg-[#14151a] overflow-hidden text-right shadow-sm font-serif">
+    <div className="my-3 rounded-2xl border border-[#262833] bg-[#14151a] overflow-hidden text-right shadow-sm">
       {/* Progress Top Bar */}
       <div className="w-full bg-[#20222a] h-1">
         <div
