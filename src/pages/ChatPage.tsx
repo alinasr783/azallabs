@@ -324,8 +324,15 @@ export const ChatPage: React.FC = () => {
     const tickTickToken = getTickTickToken()
 
     // Direct, reliable TickTick handler — executes the requested tool SERVER-SIDE
-    // (real data) and returns a natural Arabic answer + a real plan step. This avoids
-    // the fragile multi-agent pipeline for simple TickTick CRUD/query requests.
+    // (real data) and returns a natural Arabic answer + a real plan step.
+    const lastMsgContent = existingMsgs.length > 0 ? existingMsgs[existingMsgs.length - 1].content : ''
+    const wasLastMsgTickTick =
+      lastMsgContent.includes('TickTick') ||
+      lastMsgContent.includes('المشاريع المسجلة') ||
+      lastMsgContent.includes('مشاريعك المسجلة') ||
+      lastMsgContent.includes('مهامك المسجلة') ||
+      lastMsgContent.includes('قوائمك')
+
     const isTickTickIntent =
       content.toLowerCase().includes('tick') ||
       content.includes('تيك') ||
@@ -346,12 +353,37 @@ export const ChatPage: React.FC = () => {
       content.includes('حذف') ||
       content.includes('احذف') ||
       content.includes('ازل') ||
+      content.includes('إزالة') ||
       content.includes('شيل') ||
       content.includes('مسح') ||
+      content.includes('امسح') ||
+      content.includes('تخلص من') ||
       content.toLowerCase().includes('delete') ||
-      content.toLowerCase().includes('remove')
+      content.toLowerCase().includes('remove') ||
+      (wasLastMsgTickTick &&
+        (content.includes('هم') ||
+          content.includes('دول') ||
+          content.includes('التلاتة') ||
+          content.includes('الثلاثة') ||
+          content.includes('الكل') ||
+          content.includes('كلهم') ||
+          content.includes('مشروع') ||
+          content.includes('مشاريع') ||
+          content.includes('قائمة') ||
+          content.includes('قوائم') ||
+          content.toLowerCase().includes('menu') ||
+          content.includes('منيو')))
 
-    if (isTickTickIntent && tickTickToken) {
+    if (isTickTickIntent) {
+      if (!tickTickToken) {
+        setAsstContent(
+          '⚠️ **حسابك في (TickTick) غير مربوط حالياً.**\n\nلتنفيذ هذا الطلب فعلياً وإدارة أو حذف المشاريع والمهام دون أي ادعاء غير حقيقي، يرجى ربط حسابك أولاً من [صفحة الإعدادات](/settings?tab=mcp) ثم إعادة المحاولة.',
+          true
+        )
+        setIsLoading(false)
+        return
+      }
+
       updateMessagePlan(activeId, asstMsgId, () => ({
         title: `طلب TickTick: ${content.slice(0, 26)}${content.length > 26 ? '…' : ''}`,
         items: [
@@ -363,7 +395,7 @@ export const ChatPage: React.FC = () => {
         ],
       }))
       try {
-        const ans = await runTickTickIntent(content, tickTickToken, servers, llmConfig, systemPrompt)
+        const ans = await runTickTickIntent(content, tickTickToken, servers, llmConfig, systemPrompt, existingMsgs)
         setAsstContent(ans, true)
         updateMessagePlan(activeId, asstMsgId, (prev) =>
           prev
@@ -608,10 +640,15 @@ export const ChatPage: React.FC = () => {
 1. [خادم TickTick MCP]:
    - الحالة: ${tickTickToken ? 'متصل برمز وصول حقيقي ومفعّل' : 'متاح للربط'}
    - الصلاحيات: إدارة وتنظيم المهام والقوائم والمشاريع (مثل مشروع 800 Academy ومشروع Inspire) والعادات والتركيز (إجمالي 47 أداة كاملة).
-   - الأداة الرئيسية للمهام: create_task, search_task, list_projects, complete_task.
+   - الأداة الرئيسية للمهام: create_task, search_task, list_projects, complete_task, delete_project, delete_task.
 2. [خادم 800 Academy MCP]:
    - الحالة: متصل بالخادم المحلي (http://localhost:3000/mcp)
    - الصلاحيات: إدارة المنصة التعليمية وقاعدة البيانات، المدونة والمقالات (read_blogs, add_blog)، الامتحانات (read_exams, add_exam)، بنك الأسئلة (filter_questions)، الباقات والأسعار (list_offers, update_offer)، المناهج والدروس (list_subjects_full, list_units) (إجمالي 102 أداة كاملة).
+
+=== قواعد المصداقية والأمانة الصارمة (Strict Truthfulness - No Hallucination) ===
+1. ممنوع منعاً باتاً الادعاء أو الإخبار بأنك قمت بحذف أو إنشاء أو تعديل أي مشروع أو مهمة أو سجل ما لم تكن الأداة البرمجية الفعلية قد استُدعيت ورأيت نتيجتها الحقيقية المؤكدة.
+2. إذا لم يتم تنفيذ الأداة فعلياً في خادم الـ API، يجب عليك إخبار المستخدم بصراحة ولا تدعي إتمام العملية إطلاقاً.
+3. التزم بالبيانات الحقيقية المعادة من الأدوات بدقة ولا تختلق أي أسماء أو معرفات غير واردة في الرد الفعلي.
 `
     const isTodoRequest =
       content.toLowerCase().includes('todo') ||
